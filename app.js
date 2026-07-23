@@ -291,3 +291,360 @@ function mergeReplenishRules(remoteRules = {}, localRules = {}, items = []) {
 }
 
 function mergeDeletedItems(remoteDeleted = {}, localDeleted = {}) {   const merged = {};   [...Object.entries(remoteDeleted), ...Object.entries(localDeleted)].forEach(([id, deletedAt]) => {     if (!merged[id] || new Date(deletedAt || 0) > new Date(merged[id] || 0)) {       merged[id] = deletedAt;     }   });   return merged; }  function mergeDeletedLocations(remoteDeleted = {}, localDeleted = {}) {   const merged = {};   [...Object.entries(remoteDeleted), ...Object.entries(localDeleted)].forEach(([location, deletedAt]) => {     if (!location) return;     if (!merged[location] || new Date(deletedAt || 0) > new Date(merged[location] || 0)) {       merged[location] = deletedAt;     }   });   return merged; }  function mergeDeletedZones(remoteDeleted = {}, localDeleted = {}) {   const merged = {};   [...Object.entries(remoteDeleted), ...Object.entries(localDeleted)].forEach(([zone, deletedAt]) => {     if (!zone) return;     if (!merged[zone] || new Date(deletedAt || 0) > new Date(merged[zone] || 0)) {       merged[zone] = deletedAt;     }   });   return merged; }  function mergeZones(remoteZones = [], localZones = [], deletedZones = {}, remoteMeta = {}, localMeta = {}) {   const metaZones = [...Object.values(remoteMeta || {}), ...Object.values(localMeta || {})]     .map((meta) => meta?.zone)     .filter(Boolean);   return [...new Set([...DEFAULT_ZONES, ...remoteZones, ...localZones, ...metaZones])]     .filter(Boolean)     .filter((zone) => !deletedZones[zone]); }  function mergeLocationMeta(remoteMeta = {}, localMeta = {}, zones = DEFAULT_ZONES) {   const merged = {};   [...Object.entries(remoteMeta), ...Object.entries(localMeta)].forEach(([location, meta]) => {     if (!location) return;     const existing = merged[location];     if (!existing || new Date(meta?.updatedAt || 0) >= new Date(existing?.updatedAt || 0)) {       merged[location] = {         zone: meta?.zone || inferLocationZone(location, zones),         note: meta?.note || "",         updatedAt: meta?.updatedAt || new Date().toISOString()       };     }   });   return normalizeLocationMeta(Object.keys(merged), merged, zones); }  function mergeContainers(remoteContainers = [], localContainers = []) {   const merged = new Map();   [...upgradeContainers(remoteContainers), ...upgradeContainers(localContainers)].forEach((container) => {     if (!container?.id) return;     merged.set(container.id, { ...container });   });   const ordered = DEFAULT_CONTAINERS.map((container) => merged.get(container.id) || container);   [...merged.values()].forEach((container) => {     if (!ordered.some((entry) => entry.id === container.id)) ordered.push(container);   });   return ordered; }  function setSyncStatus(mode, title, detail) {   const dot = els.syncStatusCard.querySelector(".sync-dot");   dot.classList.toggle("online", mode === "online");   els.syncStatusText.textContent = title;   els.syncStatusDetail.textContent = detail; }
+function bindElements() {
+  [
+    "syncButton", "searchInput", "itemCount", "locationCount", "lowCount",
+    "categoryFilters", "itemList", "emptyItems", "sampleButton",
+    "locationGrid", "locationFilters", "emptyLocations", "addLocationButton",
+    "zoneGrid", "emptyZones", "addZoneButton", "replenishList", "replenishHint",
+    "emptyReplenish", "householdName", "memberName", "saveSettingsButton",
+    "syncStatusCard", "syncStatusText", "syncStatusDetail", "exportButton",
+    "importInput", "clearButton", "addItemButton", "itemModal", "itemForm",
+    "itemModalTitle", "itemId", "itemName", "itemNameOptions", "itemCategory",
+    "itemCategoryOptions", "itemZone", "itemZoneOptions", "itemLocation",
+    "itemLocationOptions", "itemQuantity", "itemUnit", "trackStock", "minStockWrap",
+    "itemMinQuantity", "itemNote", "itemBrand", "itemSpec", "itemPurchaseDate",
+    "itemExpiryDate", "itemThumbnail", "deleteItemButton", "locationModal",
+    "locationForm", "locationModalTitle", "locationOriginalName", "locationName",
+    "locationZone", "locationNote", "deleteLocationButton", "toast", "spaceCanvas", "spaceStage",
+    "zoneModal", "zoneForm", "zoneModalTitle", "zoneOriginalName", "zoneName",
+    "zoneDetailModal", "zoneDetailTitle", "zoneDetailMeta", "zoneDetailList",
+    "selectedContainerName", "selectedContainerMeta", "searchResults",
+    "detailModal", "detailTitle", "detailThumb", "detailCategory",
+    "detailQuantity", "detailLocation", "detailGrid", "detailNote",
+    "openContainerButton", "editFromDetailButton", "containerModal",
+    "containerTitle", "containerMeta", "containerItemsGrid",
+    "containerItemsTableWrap", "containerItemsTableBody", "containerAddItemButton",
+    "zoneDetailAddLocationButton", "sceneTip", "listMode", "addContainerButton",
+    "containerFormModal", "containerForm", "newContainerName", "newContainerType",
+    "newContainerLocation", "newContainerDescription", "newContainerZone", "containerCount"
+  ].forEach((id) => {
+    els[id] = document.getElementById(id);
+  });
+}
+
+function bindEvents() {
+  document.querySelectorAll("[data-view]").forEach((button) => {
+    button.addEventListener("click", () => switchView(button.dataset.view));
+  });
+
+  document.querySelectorAll("[data-close-modal]").forEach((button) => {
+    button.addEventListener("click", () => closeDialogs());
+  });
+
+  document.addEventListener("toggle", handleMenuToggle, true);
+  document.addEventListener("click", handleDocumentClick);
+
+  document.querySelectorAll("[data-space-mode]").forEach((button) => {
+    button.addEventListener("click", () => switchSpaceMode(button.dataset.spaceMode));
+  });
+
+  document.querySelectorAll("[data-container-mode]").forEach((button) => {
+    button.addEventListener("click", () => switchContainerMode(button.dataset.containerMode));
+  });
+
+  els.searchInput.addEventListener("input", (event) => {
+    state.search = event.target.value.trim().toLowerCase();
+    render();
+  });
+
+  els.itemZone?.addEventListener("input", populateLocationDatalist);
+  els.addItemButton.addEventListener("click", () => openItemModal());
+  els.sampleButton.addEventListener("click", importSamples);
+  els.addLocationButton.addEventListener("click", () => openLocationModal());
+  els.addZoneButton.addEventListener("click", () => openZoneModal());
+  els.itemForm.addEventListener("submit", saveItemFromForm);
+  els.locationForm.addEventListener("submit", saveLocationFromForm);
+  els.zoneForm.addEventListener("submit", saveZoneFromForm);
+  els.deleteLocationButton.addEventListener("click", deleteCurrentLocation);
+  els.trackStock.addEventListener("change", updateMinStockVisibility);
+  els.deleteItemButton.addEventListener("click", deleteCurrentItem);
+  els.saveSettingsButton.addEventListener("click", saveSettings);
+  els.exportButton.addEventListener("click", exportData);
+  els.importInput.addEventListener("change", importData);
+  els.clearButton.addEventListener("click", clearData);
+  els.syncButton.addEventListener("click", syncNow);
+  els.editFromDetailButton.addEventListener("click", () => {
+    if (state.selectedItemId) openItemModal(state.selectedItemId);
+  });
+  els.openContainerButton.addEventListener("click", () => {
+    const item = getItemById(state.selectedItemId);
+    if (item) openContainerForLocation(item.location);
+  });
+  els.containerAddItemButton?.addEventListener("click", () => {
+    const location = state.selectedLocation;
+    closeDialogs();
+    openItemModal();
+    if (location) {
+      els.itemLocation.value = location;
+      els.itemZone.value = getLocationMeta(location).zone || "";
+      populateLocationDatalist();
+    }
+  });
+  els.zoneDetailAddLocationButton?.addEventListener("click", () => {
+    const zone = els.zoneDetailTitle.textContent.trim();
+    closeDialogs();
+    openLocationModal();
+    if (zone && els.locationZone) els.locationZone.value = zone;
+  });
+  els.searchInput.addEventListener("search", render);
+}
+
+function populateFormOptions() {
+  const categories = DEFAULT_CATEGORIES.filter((cat) => cat.name !== "全部").map((cat) => cat.name);
+  const usedCategories = state.data.items.map((item) => item.category).filter(Boolean);
+  const itemNames = state.data.items.map((item) => item.name).filter(Boolean);
+  setDatalistOptions(els.itemNameOptions, [...new Set(itemNames)]);
+  setDatalistOptions(els.itemCategoryOptions, [...new Set([...categories, ...usedCategories])]);
+  setDatalistOptions(els.itemZoneOptions, state.data.zones);
+  populateLocationDatalist();
+  setSelectOptions(els.locationZone, state.data.zones);
+}
+
+function populateLocationDatalist() {
+  if (!els.itemLocationOptions) return;
+  const zone = els.itemZone?.value.trim();
+  const locations = zone
+    ? state.data.locations.filter((location) => getLocationMeta(location).zone === zone || location.includes(zone))
+    : state.data.locations;
+  setDatalistOptions(els.itemLocationOptions, locations.length ? locations : state.data.locations);
+}
+
+function setDatalistOptions(datalist, values) {
+  if (!datalist) return;
+  datalist.innerHTML = "";
+  [...new Set(values.filter(Boolean))].forEach((value) => {
+    const option = document.createElement("option");
+    option.value = value;
+    datalist.appendChild(option);
+  });
+}
+
+function setSelectOptions(select, values) {
+  if (!select) return;
+  if (select.tagName !== "SELECT") {
+    setDatalistOptions(select, values);
+    return;
+  }
+  const current = select.value;
+  select.innerHTML = "";
+  values.forEach((value) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.appendChild(option);
+  });
+  if (values.includes(current)) select.value = current;
+}
+
+function openItemModal(id = null) {
+  populateFormOptions();
+  const item = id ? state.data.items.find((entry) => entry.id === id) : null;
+  const location = item?.location || state.data.locations[0] || "临时-待整理";
+  els.itemModalTitle.textContent = item ? "编辑物品" : "新增物品";
+  els.deleteItemButton.classList.toggle("hidden", !item);
+  els.itemId.value = item?.id || "";
+  els.itemName.value = item?.name || "";
+  els.itemCategory.value = item?.category || "日用";
+  els.itemZone.value = location ? getLocationMeta(location).zone || "" : "";
+  els.itemLocation.value = location;
+  els.itemQuantity.value = item?.quantity ?? 1;
+  els.itemUnit.value = item?.unit || "";
+  els.trackStock.checked = Boolean(item?.trackStock);
+  els.itemMinQuantity.value = item?.minQuantity ?? 1;
+  els.itemNote.value = item?.note || "";
+  els.itemBrand.value = item?.brand || "";
+  els.itemSpec.value = item?.spec || "";
+  els.itemPurchaseDate.value = item?.purchaseDate || "";
+  els.itemExpiryDate.value = item?.expiryDate || "";
+  els.itemThumbnail.value = item?.thumbnail || "";
+  populateLocationDatalist();
+  updateMinStockVisibility();
+  els.itemModal.showModal();
+  setTimeout(() => els.itemName.focus(), 80);
+}
+function createDefaultZoneMeta(zones) {
+  return normalizeZoneMeta(zones, {});
+}
+
+function normalizeZoneMeta(zones, meta = {}) {
+  const now = new Date().toISOString();
+  return Object.fromEntries(
+    (zones || DEFAULT_ZONES).filter(Boolean).map((zone) => {
+      const existing = meta?.[zone] || {};
+      return [
+        zone,
+        {
+          note: existing.note || "",
+          image: existing.image || "",
+          updatedAt: existing.updatedAt || now
+        }
+      ];
+    })
+  );
+}
+
+function mergeZoneMeta(remoteMeta = {}, localMeta = {}, zones = DEFAULT_ZONES) {
+  const merged = {};
+  [...Object.entries(remoteMeta || {}), ...Object.entries(localMeta || {})].forEach(([zone, meta]) => {
+    if (!zone) return;
+    const existing = merged[zone];
+    if (!existing || new Date(meta?.updatedAt || 0) >= new Date(existing?.updatedAt || 0)) {
+      merged[zone] = {
+        note: meta?.note || "",
+        image: meta?.image || "",
+        updatedAt: meta?.updatedAt || new Date().toISOString()
+      };
+    }
+  });
+  return normalizeZoneMeta(zones, merged);
+}
+function normalizeItemName(name) {
+  return String(name || "").trim().replace(/\s+/g, " ");
+}
+
+function normalizeItemRecord(item = {}) {
+  const now = new Date().toISOString();
+  return {
+    id: item.id || crypto.randomUUID(),
+    name: normalizeItemName(item.name),
+    category: item.category || "未分类",
+    location: item.location || "",
+    quantity: Number(item.quantity || 0),
+    unit: item.unit || "",
+    trackStock: Boolean(item.trackStock),
+    minQuantity: Number(item.minQuantity || 0),
+    note: item.note || "",
+    brand: item.brand || "",
+    spec: item.spec || "",
+    purchaseDate: item.purchaseDate || "",
+    expiryDate: item.expiryDate || "",
+    thumbnail: item.thumbnail || "",
+    updatedBy: item.updatedBy || "我",
+    updatedAt: item.updatedAt || now
+  };
+}
+
+function normalizeReplenishRule(source = {}, updatedAt = new Date().toISOString()) {
+  return {
+    trackStock: Boolean(source.trackStock),
+    minQuantity: Number(source.minQuantity || 0),
+    updatedBy: source.updatedBy || "我",
+    updatedAt: source.updatedAt || updatedAt
+  };
+}
+
+function normalizeReplenishRules(rules = {}, items = []) {
+  const normalized = {};
+  Object.entries(rules || {}).forEach(([name, rule]) => {
+    const key = normalizeItemName(name);
+    if (!key) return;
+    normalized[key] = normalizeReplenishRule(rule);
+  });
+  items.forEach((item) => {
+    const key = normalizeItemName(item?.name);
+    if (!key || normalized[key]) return;
+    normalized[key] = normalizeReplenishRule(item, item?.updatedAt || new Date().toISOString());
+  });
+  return normalized;
+}
+
+function getStoredReplenishRule(name) {
+  const key = normalizeItemName(name);
+  return key ? state.data.replenishRules?.[key] || null : null;
+}
+
+function getReplenishRule(name) {
+  const stored = getStoredReplenishRule(name);
+  if (stored) return stored;
+  const item = state.data.items.find((entry) => normalizeItemName(entry.name) === normalizeItemName(name));
+  return item ? normalizeReplenishRule(item, item.updatedAt) : normalizeReplenishRule({});
+}
+
+function setReplenishRule(name, rule, updatedBy = "我") {
+  const key = normalizeItemName(name);
+  if (!key) return;
+  state.data.replenishRules = state.data.replenishRules || {};
+  state.data.replenishRules[key] = {
+    trackStock: Boolean(rule.trackStock),
+    minQuantity: Number(rule.minQuantity || 0),
+    updatedBy,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function syncItemReplenishFields(item, rules = {}) {
+  const rule = rules[normalizeItemName(item.name)];
+  if (!rule) return item;
+  return {
+    ...item,
+    trackStock: Boolean(rule.trackStock),
+    minQuantity: Number(rule.minQuantity || 0)
+  };
+}
+
+function getItemTotalQuantityByName(name) {
+  const key = normalizeItemName(name);
+  return state.data.items
+    .filter((item) => normalizeItemName(item.name) === key)
+    .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+}
+
+function getItemGroups(items) {
+  const groups = new Map();
+  items.forEach((item) => {
+    const key = normalizeItemName(item.name) || item.id;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        name: key,
+        category: item.category,
+        unit: item.unit || "",
+        items: [],
+        totalQuantity: 0,
+        minQuantity: Number(getReplenishRule(key).minQuantity || item.minQuantity || 0),
+        trackStock: Boolean(getReplenishRule(key).trackStock || item.trackStock)
+      });
+    }
+    const group = groups.get(key);
+    group.items.push(item);
+    group.totalQuantity += Number(item.quantity || 0);
+    if (!group.category && item.category) group.category = item.category;
+    if (!group.unit && item.unit) group.unit = item.unit;
+  });
+  return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+}
+
+function createItemGroupCard(group, { compact = false, open = true } = {}) {
+  const details = document.createElement("details");
+  details.className = `item-group-card${compact ? " compact" : ""}`;
+  details.open = open;
+  const quantityText = `${group.totalQuantity}${group.unit || ""}`;
+  details.innerHTML = `
+    <summary class="item-group-summary">
+      <div class="item-title">
+        <span class="category-dot" style="background:${getCategoryColor(group.category)}"></span>
+        <strong>${escapeHtml(group.name)}</strong>
+      </div>
+      <span class="group-hint">${escapeHtml(quantityText)}${group.trackStock ? ` / 最少 ${escapeHtml(group.minQuantity)}${escapeHtml(group.unit || "")}` : ""}</span>
+    </summary>
+    <div class="item-group-body"></div>
+  `;
+  const body = details.querySelector(".item-group-body");
+  group.items.forEach((item) => {
+    const entry = document.createElement("div");
+    entry.className = "item-group-entry";
+    entry.innerHTML = `
+      ${createThumbnailMarkup(item, "xs")}
+      <div class="item-group-entry-copy">
+        <strong>${escapeHtml(item.location || "未设置位置")}</strong>
+        <span>${escapeHtml(item.category || "未分类")} · ${escapeHtml(formatQuantity(item))}</span>
+      </div>
+      <div class="item-group-entry-actions">
+        <button type="button" class="mini-link" data-edit="${escapeHtml(item.id)}">编辑</button>
+      </div>
+    `;
+    entry.querySelector("[data-edit]")?.addEventListener("click", () => openItemModal(item.id));
+    body.appendChild(entry);
+  });
+  return details;
+}
