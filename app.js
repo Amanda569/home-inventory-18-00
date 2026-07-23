@@ -121,6 +121,7 @@ const state = {
   search: "",
   category: "全部",
   selectedLocation: "",
+  selectedZone: "",
   selectedItemId: "",
   syncClient: null,
   saving: false,
@@ -163,10 +164,12 @@ function bindElements() {
     "detailQuantity", "detailLocation", "detailGrid", "detailNote",
     "openContainerButton", "editFromDetailButton", "containerModal",
     "containerTitle", "containerMeta", "containerItemsGrid",
-    "containerItemsTableWrap", "containerItemsTableBody", "sceneTip", "listMode",
+    "containerItemsTableWrap", "containerItemsTableBody", "containerAddItemButton",
+    "sceneTip", "listMode",
     "addContainerButton", "containerFormModal", "containerForm", "newContainerName",
     "newContainerType", "newContainerLocation", "newContainerDescription",
-    "newContainerZone", "containerCount"
+    "newContainerZone", "containerCount",
+    "zoneDetailAddLocationButton"
   ].forEach((id) => {
     els[id] = document.getElementById(id);
   });
@@ -218,6 +221,12 @@ function bindEvents() {
   els.openContainerButton.addEventListener("click", () => {
     const item = getItemById(state.selectedItemId);
     if (item) openContainerForLocation(item.location);
+  });
+  els.containerAddItemButton.addEventListener("click", () => {
+    if (state.selectedLocation) openItemModal(null, state.selectedLocation);
+  });
+  els.zoneDetailAddLocationButton.addEventListener("click", () => {
+    if (state.selectedZone) openLocationModal("", state.selectedZone);
   });
   els.searchInput.addEventListener("search", render);
 }
@@ -596,7 +605,15 @@ function renderLocations() {
       </div>
       ${meta.note ? `<p>${escapeHtml(meta.note)}</p>` : `<p class="muted">没有说明</p>`}
     `;
-    card.addEventListener("click", () => openContainerForLocation(location));
+    const menu = card.querySelector(".location-menu");
+    menu?.addEventListener("click", (event) => event.stopPropagation());
+    menu?.addEventListener("pointerdown", (event) => event.stopPropagation());
+    menu?.querySelector("summary")?.addEventListener("click", (event) => event.stopPropagation());
+    card.addEventListener("click", (event) => {
+      if (event.target.closest(".location-menu")) return;
+      closeOpenMenus();
+      openContainerForLocation(location);
+    });
     card.querySelector('[data-action="edit"]').addEventListener("click", (event) => {
       event.stopPropagation();
       closeOpenMenus();
@@ -669,8 +686,13 @@ function renderZones() {
         <span>${lowCount ? `${lowCount} 待补` : "点击查看"}</span>
       </div>
     `;
+    const menu = card.querySelector(".zone-menu");
+    menu?.addEventListener("click", (event) => event.stopPropagation());
+    menu?.addEventListener("pointerdown", (event) => event.stopPropagation());
+    menu?.querySelector("summary")?.addEventListener("click", (event) => event.stopPropagation());
     card.addEventListener("click", (event) => {
       if (event.target.closest(".zone-menu")) return;
+      closeOpenMenus();
       openZoneDetail(zone);
     });
     card.querySelector('[data-action="edit"]').addEventListener("click", (event) => {
@@ -832,6 +854,9 @@ function openContainerForLocation(location) {
   if (!location) return;
   state.selectedLocation = location;
   els.containerTitle.textContent = location;
+  if (els.containerAddItemButton) {
+    els.containerAddItemButton.disabled = false;
+  }
   renderContainerModal();
   switchContainerMode(state.containerMode);
   els.containerModal.showModal();
@@ -1355,7 +1380,7 @@ function isLowStock(item) {
   return Boolean(item.trackStock) && Number(item.quantity || 0) <= Number(item.minQuantity || 0);
 }
 
-function openItemModal(id = null) {
+function openItemModal(id = null, presetLocation = "") {
   populateFormOptions();
   const item = id ? state.data.items.find((entry) => entry.id === id) : null;
   els.itemModalTitle.textContent = item ? "编辑物品" : "新增物品";
@@ -1364,6 +1389,9 @@ function openItemModal(id = null) {
   els.itemName.value = item?.name || "";
   els.itemCategory.value = item?.category || "日用";
   els.itemLocation.value = item?.location || state.data.locations[0] || "临时-待整理";
+  if (!item && presetLocation) {
+    els.itemLocation.value = presetLocation;
+  }
   els.itemQuantity.value = item?.quantity ?? 1;
   els.itemUnit.value = item?.unit || "";
   els.trackStock.checked = Boolean(item?.trackStock);
@@ -1481,7 +1509,7 @@ async function saveLocationFromForm(event) {
   await persistData();
 }
 
-function openLocationModal(location = "") {
+function openLocationModal(location = "", presetZone = "") {
   const meta = location ? getLocationMeta(location) : { zone: "其他", note: "" };
   els.locationModalTitle.textContent = location ? "编辑位置" : "新增位置";
   els.locationOriginalName.value = location || "";
@@ -1493,7 +1521,8 @@ function openLocationModal(location = "") {
     option.textContent = meta.zone || "其他";
     els.locationZone.appendChild(option);
   }
-  els.locationZone.value = meta.zone || inferLocationZone(location, state.data.zones) || "其他";
+  const targetZone = presetZone || meta.zone || inferLocationZone(location, state.data.zones) || "其他";
+  els.locationZone.value = targetZone;
   els.locationNote.value = meta.note || "";
   els.deleteLocationButton.classList.toggle("hidden", !location);
   els.locationModal.showModal();
@@ -1561,6 +1590,7 @@ async function deleteZone(zone) {
 }
 
 function openZoneDetail(zone) {
+  state.selectedZone = zone;
   const locations = getLocationsForZone(zone);
   const itemCount = locations.reduce((sum, location) => sum + getItemsForLocation(location).length, 0);
   const lowCount = locations.reduce((sum, location) => sum + getItemsForLocation(location).filter(isLowStock).length, 0);
@@ -1587,6 +1617,9 @@ function openZoneDetail(zone) {
 
   if (!locations.length) {
     els.zoneDetailList.innerHTML = '<div class="empty-state visible"><h3>这个区域还没有位置</h3></div>';
+  }
+  if (els.zoneDetailAddLocationButton) {
+    els.zoneDetailAddLocationButton.disabled = false;
   }
   els.zoneDetailModal.showModal();
 }
