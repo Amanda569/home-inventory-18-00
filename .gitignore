@@ -1,0 +1,13 @@
+# Generated deploy bundles
+home-inventory-pwa-deploy*.zip
+home-inventory-pwa-deploy-*/
+
+# Local notes / caches
+.agents/
+.codex/
+升级我的家.assets/
+
+# OS / editor noise
+Thumbs.db
+.DS_Store
+*.log

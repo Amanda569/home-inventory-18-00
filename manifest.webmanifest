@@ -1,0 +1,17 @@
+{
+  "name": "小家库存",
+  "short_name": "小家库存",
+  "description": "两人共享的轻量收纳和库存 PWA。",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f6f4ef",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
