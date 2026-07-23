@@ -181,7 +181,8 @@
         </div>
         <input id="itemId" type="hidden">
         <label class="field-label" for="itemName">物品名</label>
-        <input class="plain-input" id="itemName" type="text" required placeholder="比如：牙膏">
+        <input class="plain-input" id="itemName" type="text" list="itemNameOptions" required placeholder="比如：牙膏">
+        <datalist id="itemNameOptions"></datalist>
 
         <label class="field-label" for="itemCategory">分类（可自定义）</label>
         <input class="plain-input" id="itemCategory" type="text" list="itemCategoryOptions" placeholder="日用 / 洗漱 / 工具 / 自定义">
@@ -322,6 +323,7 @@
         <input id="locationOriginalName" type="hidden">
         <label class="field-label" for="locationName">位置名称</label>
         <input class="plain-input" id="locationName" type="text" required placeholder="比如：床下-A箱">
+        <p class="field-error" id="locationNameError" aria-live="polite"></p>
         <label class="field-label" for="locationZone">区域</label>
         <select class="plain-input" id="locationZone">
           <option value="床下">床下</option>
@@ -361,6 +363,7 @@
         <input id="zoneOriginalName" type="hidden">
         <label class="field-label" for="zoneName">区域名称</label>
         <input class="plain-input" id="zoneName" type="text" placeholder="比如：床头柜">
+        <p class="field-error" id="zoneNameError" aria-live="polite"></p>
         <label class="field-label" for="zoneImageFile">区域图片</label>
         <div class="image-upload-row">
           <input class="plain-input file-input" id="zoneImageFile" type="file" accept="image/*">

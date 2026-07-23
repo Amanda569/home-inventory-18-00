@@ -120,6 +120,7 @@ const state = {
   locationFilter: "all",
   search: "",
   category: "全部",
+  expandedItemGroups: new Set(),
   selectedLocation: "",
   selectedZone: "",
   selectedItemId: "",
@@ -151,15 +152,15 @@ function bindElements() {
     "emptyReplenish", "householdName", "memberName", "saveSettingsButton",
     "syncStatusCard", "syncStatusText", "syncStatusDetail", "exportButton",
     "importInput", "clearButton", "addItemButton", "itemModal", "itemForm",
-    "itemModalTitle", "itemId", "itemName", "itemCategory", "itemCategoryOptions",
+    "itemModalTitle", "itemId", "itemName", "itemNameOptions", "itemCategory", "itemCategoryOptions",
     "itemZone", "itemZoneOptions", "itemLocation", "itemLocationOptions",
     "itemQuantity", "itemUnit", "trackStock", "minStockWrap",
     "itemMinQuantity", "itemNote", "itemBrand", "itemSpec", "itemPurchaseDate",
     "itemExpiryDate", "itemThumbnail", "deleteItemButton", "locationModal",
-    "locationForm", "locationModalTitle", "locationOriginalName", "locationName",
+    "locationForm", "locationModalTitle", "locationOriginalName", "locationName", "locationNameError",
     "locationZone", "locationNote", "locationImageFile", "locationImage",
     "locationImagePreview", "clearLocationImageButton", "deleteLocationButton", "toast", "spaceCanvas", "spaceStage",
-    "zoneModal", "zoneForm", "zoneModalTitle", "zoneOriginalName", "zoneName",
+    "zoneModal", "zoneForm", "zoneModalTitle", "zoneOriginalName", "zoneName", "zoneNameError",
     "zoneImageFile", "zoneImage", "zoneImagePreview", "clearZoneImageButton",
     "zoneDetailModal", "zoneDetailTitle", "zoneDetailMeta", "zoneDetailList",
     "selectedContainerName", "selectedContainerMeta", "searchResults",
@@ -212,12 +213,15 @@ function bindEvents() {
   els.zoneForm.addEventListener("submit", saveZoneFromForm);
   els.deleteLocationButton.addEventListener("click", deleteCurrentLocation);
   els.trackStock.addEventListener("change", updateMinStockVisibility);
+  els.itemName?.addEventListener("input", refreshItemNameOptions);
   els.itemZone?.addEventListener("input", () => refreshItemLocationOptions());
   els.itemZone?.addEventListener("change", () => refreshItemLocationOptions());
   els.locationImageFile?.addEventListener("change", (event) => handleImageUpload(event, "location"));
   els.zoneImageFile?.addEventListener("change", (event) => handleImageUpload(event, "zone"));
   els.clearLocationImageButton?.addEventListener("click", () => clearImageField("location"));
   els.clearZoneImageButton?.addEventListener("click", () => clearImageField("zone"));
+  els.locationName?.addEventListener("input", clearLocationNameError);
+  els.zoneName?.addEventListener("input", clearZoneNameError);
   els.deleteItemButton.addEventListener("click", deleteCurrentItem);
   els.saveSettingsButton.addEventListener("click", saveSettings);
   els.exportButton.addEventListener("click", exportData);
@@ -466,9 +470,9 @@ function render() {
 }
 
 function renderStats() {
-  els.itemCount.textContent = state.data.items.length;
+  els.itemCount.textContent = getItemGroups(state.data.items).length;
   els.locationCount.textContent = state.data.locations.length;
-  els.lowCount.textContent = getLowStockItems().length;
+  els.lowCount.textContent = getItemGroups(getLowStockItems()).length;
   if (els.containerCount) els.containerCount.textContent = getContainers().length;
 }
 
@@ -492,12 +496,12 @@ function renderCategoryFilters() {
 
 function renderItems() {
   els.listMode.classList.remove("hidden");
-  const items = getFilteredItems();
+  const groups = getItemGroups(getFilteredItems());
   els.itemList.innerHTML = "";
-  els.emptyItems.classList.toggle("visible", items.length === 0);
+  els.emptyItems.classList.toggle("visible", groups.length === 0);
 
-  items.forEach((item) => {
-    els.itemList.appendChild(createItemCard(item));
+  groups.forEach((group) => {
+    els.itemList.appendChild(createItemGroupCard(group));
   });
 }
 
@@ -519,24 +523,24 @@ function renderSearchResults() {
     return;
   }
 
-  const results = getSearchMatches().slice(0, 6);
+  const results = getItemGroups(getSearchMatches()).slice(0, 6);
   els.searchResults.classList.add("visible");
   if (!results.length) {
     els.searchResults.innerHTML = '<div class="search-empty">没有找到匹配的物品</div>';
     return;
   }
-  results.forEach((item) => {
+  results.forEach((group) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "search-result";
     button.innerHTML = `
-      ${createThumbnailMarkup(item, "sm")}
+      ${createThumbnailMarkup(group.items[0], "sm")}
       <div class="search-result-copy">
-        <strong>${escapeHtml(item.name)}</strong>
-        <span>${escapeHtml(item.location || "未设置位置")}</span>
+        <strong>${escapeHtml(group.name)}</strong>
+        <span>${escapeHtml(group.locationPreview || "未设置位置")}</span>
       </div>
     `;
-    button.addEventListener("click", () => openItemDetail(item.id));
+    button.addEventListener("click", () => focusItemGroup(group.name));
     els.searchResults.appendChild(button);
   });
 }
@@ -553,55 +557,115 @@ function getSearchMatches() {
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 }
 
-function createItemCard(item) {
-  const card = document.createElement("article");
-  card.className = "item-card";
-  card.addEventListener("click", () => openItemDetail(item.id));
+function focusItemGroup(groupName) {
+  state.expandedItemGroups.add(groupName);
+  if (state.view !== "items") {
+    switchView("items");
+  }
+  render();
+  requestAnimationFrame(() => {
+    const card = [...document.querySelectorAll(".item-group-card")].find((entry) => entry.dataset.groupName === groupName);
+    card?.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+}
 
-  const color = getCategoryColor(item.category);
-  const isLow = isLowStock(item);
-  const qty = formatQuantity(item);
+function createItemGroupCard(group, options = {}) {
+  const card = document.createElement("details");
+  card.className = `item-group-card${options.compact ? " compact" : ""}`;
+  card.dataset.groupName = group.name;
+  const shouldOpen = state.expandedItemGroups.has(group.name) || Boolean(options.open);
+  card.open = shouldOpen;
+  card.addEventListener("toggle", () => {
+    if (card.open) state.expandedItemGroups.add(group.name);
+    else state.expandedItemGroups.delete(group.name);
+    const hint = card.querySelector(".group-hint");
+    if (hint) hint.textContent = card.open ? "收起" : "展开查看";
+  });
+
+  const categoryLabel = group.categories.length === 1 ? group.categories[0] : "多分类";
+  const qtyLabel = formatGroupQuantity(group);
+  const locationPreview = group.locationPreview || "未设置位置";
 
   card.innerHTML = `
-    <div class="item-main">
-      ${createThumbnailMarkup(item)}
-      <div class="item-copy">
-        <div class="item-title">
-          <span class="category-dot" style="background:${color}"></span>
-          <strong>${escapeHtml(item.name)}</strong>
+    <summary class="item-group-summary">
+      <div class="item-main">
+        ${createThumbnailMarkup(group.items[0], "sm")}
+        <div class="item-copy">
+          <div class="item-title">
+            <span class="category-dot" style="background:${getCategoryColor(group.items[0]?.category)}"></span>
+            <strong>${escapeHtml(group.name)}</strong>
+          </div>
+          <div class="meta-line">
+            <span>${escapeHtml(categoryLabel)}</span>
+            <span>·</span>
+            <span>${escapeHtml(locationPreview)}</span>
+          </div>
+          <div class="meta-line">
+            <span>${group.items.length} 条记录</span>
+            <span>·</span>
+            <span>${group.locations.length} 个位置</span>
+          </div>
         </div>
-        <div class="meta-line">
-          <span>${escapeHtml(item.category || "未分类")}</span>
-          <span>·</span>
-          <span>${escapeHtml(item.location || "未设置位置")}</span>
-        </div>
-        ${item.note ? `<div class="meta-line">${escapeHtml(item.note)}</div>` : ""}
       </div>
-    </div>
-    <div class="qty-box">
-      <strong>${escapeHtml(qty)}</strong>
-      ${isLow ? `<span class="low-badge">需补货</span>` : ""}
-      <div class="stepper" aria-label="调整数量">
-        <button type="button" data-delta="-1" aria-label="减少数量">-</button>
-        <button type="button" data-delta="1" aria-label="增加数量">+</button>
+      <div class="qty-box">
+        <strong>${escapeHtml(qtyLabel)}</strong>
+        ${group.lowItems.length ? `<span class="low-badge">需补货</span>` : ""}
+        <span class="group-hint">${card.open ? "收起" : "展开查看"}</span>
       </div>
-      <button type="button" class="mini-link" data-edit="1">编辑</button>
+    </summary>
+    <div class="item-group-body">
+      ${group.items.map((item) => createGroupEntryMarkup(item, group)).join("")}
     </div>
   `;
 
-  card.querySelectorAll("[data-delta]").forEach((button) => {
+  card.querySelectorAll("[data-open-location]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      adjustQuantity(item.id, Number(button.dataset.delta));
+      const location = button.dataset.openLocation || "";
+      if (location) openContainerForLocation(location);
     });
   });
 
-  card.querySelector("[data-edit]")?.addEventListener("click", (event) => {
-    event.stopPropagation();
-    openItemModal(item.id);
+  card.querySelectorAll("[data-edit-item]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const itemId = button.dataset.editItem || "";
+      if (itemId) openItemModal(itemId);
+    });
+  });
+
+  card.querySelectorAll("[data-adjust-item]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const itemId = button.dataset.adjustItem || "";
+      const delta = Number(button.dataset.delta || 0);
+      if (itemId && delta) adjustQuantity(itemId, delta);
+    });
   });
 
   return card;
+}
+
+function createGroupEntryMarkup(item, group) {
+  const meta = getLocationMeta(item.location);
+  const isLow = isLowStock(item);
+  return `
+    <div class="item-group-entry${isLow ? " low" : ""}">
+      ${createEntityThumbnailMarkup(meta.image, item.location || "未设置位置", "sm")}
+      <div class="item-group-entry-copy">
+        <strong>${escapeHtml(item.location || "未设置位置")}</strong>
+        <span>${escapeHtml(formatQuantity(item))}${item.note ? ` · ${escapeHtml(item.note)}` : ""}</span>
+      </div>
+      <div class="item-group-entry-actions">
+        <div class="stepper compact-stepper" aria-label="调整数量">
+          <button type="button" data-adjust-item="${escapeHtml(item.id)}" data-delta="-1" aria-label="减少数量">-</button>
+          <button type="button" data-adjust-item="${escapeHtml(item.id)}" data-delta="1" aria-label="增加数量">+</button>
+        </div>
+        <button type="button" class="mini-link" data-open-location="${escapeHtml(item.location || "")}">看位置</button>
+        <button type="button" class="mini-link" data-edit-item="${escapeHtml(item.id)}">编辑</button>
+      </div>
+    </div>
+  `;
 }
 
 function renderLocations() {
@@ -772,13 +836,13 @@ function getFilteredLocations() {
 }
 
 function renderReplenish() {
-  const lowItems = getLowStockItems();
+  const lowItems = getItemGroups(getLowStockItems());
   els.replenishList.innerHTML = "";
   els.replenishHint.textContent = lowItems.length ? `${lowItems.length} 件` : "";
   els.emptyReplenish.classList.toggle("visible", lowItems.length === 0);
 
-  lowItems.forEach((item) => {
-    els.replenishList.appendChild(createItemCard(item));
+  lowItems.forEach((group) => {
+    els.replenishList.appendChild(createItemGroupCard(group, { compact: true, open: false }));
   });
 }
 
@@ -1424,6 +1488,53 @@ function getLowStockItems() {
   return state.data.items.filter(isLowStock);
 }
 
+function getItemGroups(items) {
+  const groups = new Map();
+  items.forEach((item) => {
+    const name = normalizeItemName(item.name);
+    if (!groups.has(name)) {
+      groups.set(name, { name, items: [] });
+    }
+    groups.get(name).items.push(item);
+  });
+
+  return [...groups.values()]
+    .map((group) => {
+      group.items.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      const locations = [...new Set(group.items.map((item) => item.location).filter(Boolean))];
+      const categories = [...new Set(group.items.map((item) => item.category).filter(Boolean))];
+      const units = [...new Set(group.items.map((item) => item.unit).filter(Boolean))];
+      const totalQuantity = group.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+      const lowItems = group.items.filter(isLowStock);
+      return {
+        ...group,
+        items: group.items,
+        locations,
+        locationPreview: locations.slice(0, 2).join("、") + (locations.length > 2 ? " 等" : ""),
+        categories,
+        unit: units.length === 1 ? units[0] : "",
+        totalQuantity,
+        lowItems,
+        latestUpdatedAt: group.items[0]?.updatedAt || ""
+      };
+    })
+    .sort((a, b) => new Date(b.latestUpdatedAt || 0) - new Date(a.latestUpdatedAt || 0));
+}
+
+function normalizeItemName(name) {
+  return String(name || "").trim() || "未命名物品";
+}
+
+function formatGroupQuantity(group) {
+  const unit = group.unit ? String(group.unit).trim() : "";
+  return `${formatQuantityValue(group.totalQuantity)}${unit}`;
+}
+
+function formatQuantityValue(value) {
+  const num = Number.isFinite(Number(value)) ? Number(value) : 0;
+  return Number.isInteger(num) ? String(num) : String(num);
+}
+
 function isLowStock(item) {
   return Boolean(item.trackStock) && Number(item.quantity || 0) <= Number(item.minQuantity || 0);
 }
@@ -1459,10 +1570,19 @@ function openItemModal(id = null, presetLocation = "") {
 function populateFormOptions() {
   const categories = DEFAULT_CATEGORIES.filter((cat) => cat.name !== "全部").map((cat) => cat.name);
   const usedCategories = state.data.items.map((item) => item.category).filter(Boolean);
+  refreshItemNameOptions();
   setDatalistOptions(els.itemCategoryOptions, [...new Set([...categories, ...usedCategories])]);
   setDatalistOptions(els.itemZoneOptions, getKnownZones());
   refreshItemLocationOptions(els.itemZone?.value || state.data.zones[0] || "");
   setSelectOptions(els.locationZone, getKnownZones());
+}
+
+function refreshItemNameOptions() {
+  const knownItemNames = [...new Set([
+    ...SAMPLE_ITEMS.map((item) => item.name),
+    ...state.data.items.map((item) => item.name)
+  ])].filter(Boolean);
+  setDatalistOptions(els.itemNameOptions, knownItemNames);
 }
 
 function setSelectOptions(select, values) {
@@ -1500,6 +1620,30 @@ function refreshItemLocationOptions(zoneValue = els.itemZone?.value || "") {
     ? state.data.locations.filter((location) => getLocationMeta(location).zone === zone)
     : [...state.data.locations];
   setDatalistOptions(els.itemLocationOptions, locations);
+}
+
+function showFieldError(input, errorEl, message) {
+  if (input) {
+    input.classList.add("input-error");
+    input.setAttribute("aria-invalid", "true");
+  }
+  if (errorEl) errorEl.textContent = message || "";
+}
+
+function clearFieldError(input, errorEl) {
+  if (input) {
+    input.classList.remove("input-error");
+    input.removeAttribute("aria-invalid");
+  }
+  if (errorEl) errorEl.textContent = "";
+}
+
+function clearLocationNameError() {
+  clearFieldError(els.locationName, els.locationNameError);
+}
+
+function clearZoneNameError() {
+  clearFieldError(els.zoneName, els.zoneNameError);
 }
 
 async function handleImageUpload(event, kind) {
@@ -1651,7 +1795,8 @@ async function saveLocationFromForm(event) {
   if (!name) return;
   const duplicate = state.data.locations.includes(name) && name !== originalName;
   if (duplicate) {
-    showToast("这个位置已经存在");
+    showFieldError(els.locationName, els.locationNameError, "该位置已存在");
+    els.locationName.focus();
     return;
   }
 
@@ -1689,6 +1834,7 @@ async function saveLocationFromForm(event) {
 
 function openLocationModal(location = "", presetZone = "") {
   const meta = location ? getLocationMeta(location) : { zone: "其他", note: "" };
+  clearLocationNameError();
   els.locationModalTitle.textContent = location ? "编辑位置" : "新增位置";
   els.locationOriginalName.value = location || "";
   els.locationName.value = location || "";
@@ -1712,6 +1858,7 @@ function openLocationModal(location = "", presetZone = "") {
 
 function openZoneModal(zone = "") {
   const meta = getZoneMeta(zone);
+  clearZoneNameError();
   els.zoneOriginalName.value = zone || "";
   els.zoneName.value = zone || "";
   els.zoneModalTitle.textContent = zone ? "编辑区域" : "新增区域";
@@ -1729,7 +1876,8 @@ async function saveZoneFromForm(event) {
   const image = els.zoneImage.value.trim();
   if (!name) return;
   if (state.data.zones.includes(name) && name !== originalName) {
-    showToast("这个区域已经存在");
+    showFieldError(els.zoneName, els.zoneNameError, "该区域已存在");
+    els.zoneName.focus();
     return;
   }
 
