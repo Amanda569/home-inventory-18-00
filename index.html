@@ -64,8 +64,12 @@
         <section class="view" id="locationsView" aria-labelledby="locationsTitle">
           <div class="section-head">
             <h2 id="locationsTitle">位置台账</h2>
-            <button class="text-button" id="addLocationButton">新增位置</button>
+            <div class="section-actions">
+              <button class="text-button" id="manageZonesButton">管理区域</button>
+              <button class="text-button" id="addLocationButton">新增位置</button>
+            </div>
           </div>
+          <div class="filter-row zone-filter-row" id="zoneFilters"></div>
           <div class="filter-row location-filter-row" id="locationFilters"></div>
           <div class="location-grid" id="locationGrid"></div>
           <div class="empty-state compact" id="emptyLocations">
@@ -310,6 +314,24 @@
           <button class="secondary-button" type="button" data-close-modal>取消</button>
           <button class="primary-button" type="submit">保存</button>
         </div>
+      </form>
+    </dialog>
+
+    <dialog class="modal" id="zoneModal">
+      <form method="dialog" class="modal-sheet" id="zoneForm">
+        <div class="modal-head">
+          <h2>管理区域</h2>
+          <button class="icon-button" type="button" data-close-modal aria-label="关闭">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <input id="zoneOriginalName" type="hidden">
+        <label class="field-label" for="zoneName">新增区域</label>
+        <div class="zone-add-row">
+          <input class="plain-input" id="zoneName" type="text" placeholder="比如：床头柜">
+          <button class="primary-button" type="submit">添加</button>
+        </div>
+        <div class="zone-list" id="zoneList"></div>
       </form>
     </dialog>
 

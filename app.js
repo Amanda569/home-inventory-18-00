@@ -23,6 +23,8 @@ const DEFAULT_LOCATIONS = [
   "临时-待整理"
 ];
 
+const DEFAULT_ZONES = ["床下", "衣柜", "桌面", "阳台", "卫生间", "厨房", "临时", "其他"];
+
 const DEFAULT_CONTAINERS = [
   {
     id: "wardrobe",
@@ -116,6 +118,7 @@ const state = {
   spaceMode: "list",
   containerMode: "grid",
   locationFilter: "all",
+  zoneFilter: "all",
   search: "",
   category: "全部",
   selectedLocation: "",
@@ -143,7 +146,8 @@ function bindElements() {
   [
     "syncButton", "searchInput", "itemCount", "locationCount", "lowCount",
     "categoryFilters", "itemList", "emptyItems", "sampleButton",
-    "locationGrid", "locationFilters", "emptyLocations", "addLocationButton", "replenishList", "replenishHint",
+    "locationGrid", "zoneFilters", "locationFilters", "emptyLocations", "addLocationButton",
+    "manageZonesButton", "replenishList", "replenishHint",
     "emptyReplenish", "householdName", "memberName", "saveSettingsButton",
     "syncStatusCard", "syncStatusText", "syncStatusDetail", "exportButton",
     "importInput", "clearButton", "addItemButton", "itemModal", "itemForm",
@@ -153,6 +157,7 @@ function bindElements() {
     "itemExpiryDate", "itemThumbnail", "deleteItemButton", "locationModal",
     "locationForm", "locationModalTitle", "locationOriginalName", "locationName",
     "locationZone", "locationNote", "deleteLocationButton", "toast", "spaceCanvas", "spaceStage",
+    "zoneModal", "zoneForm", "zoneOriginalName", "zoneName", "zoneList",
     "selectedContainerName", "selectedContainerMeta", "searchResults",
     "detailModal", "detailTitle", "detailThumb", "detailCategory",
     "detailQuantity", "detailLocation", "detailGrid", "detailNote",
@@ -192,8 +197,10 @@ function bindEvents() {
   els.addItemButton.addEventListener("click", () => openItemModal());
   els.sampleButton.addEventListener("click", importSamples);
   els.addLocationButton.addEventListener("click", () => openLocationModal());
+  els.manageZonesButton.addEventListener("click", openZoneModal);
   els.itemForm.addEventListener("submit", saveItemFromForm);
   els.locationForm.addEventListener("submit", saveLocationFromForm);
+  els.zoneForm.addEventListener("submit", saveZoneFromForm);
   els.deleteLocationButton.addEventListener("click", deleteCurrentLocation);
   els.containerForm?.addEventListener("submit", saveContainerFromForm);
   els.trackStock.addEventListener("change", updateMinStockVisibility);
@@ -219,11 +226,13 @@ function createInitialData() {
     householdName: "我们的小家",
     memberName: "",
     locations,
+    zones: [...DEFAULT_ZONES],
     locationMeta: createDefaultLocationMeta(locations),
     containers: DEFAULT_CONTAINERS,
     items: [],
     deletedItems: {},
     deletedLocations: {},
+    deletedZones: {},
     updatedAt: new Date().toISOString()
   };
 }
@@ -237,11 +246,13 @@ function loadData() {
       ...createInitialData(),
       ...parsed,
       locations: Array.isArray(parsed.locations) ? parsed.locations : createInitialData().locations,
+      zones: Array.isArray(parsed.zones) ? parsed.zones : createInitialData().zones,
       locationMeta: parsed.locationMeta && typeof parsed.locationMeta === "object" ? parsed.locationMeta : {},
       containers: Array.isArray(parsed.containers) ? upgradeContainers(parsed.containers) : DEFAULT_CONTAINERS,
       items: Array.isArray(parsed.items) ? parsed.items : [],
       deletedItems: parsed.deletedItems && typeof parsed.deletedItems === "object" ? parsed.deletedItems : {},
-      deletedLocations: parsed.deletedLocations && typeof parsed.deletedLocations === "object" ? parsed.deletedLocations : {}
+      deletedLocations: parsed.deletedLocations && typeof parsed.deletedLocations === "object" ? parsed.deletedLocations : {},
+      deletedZones: parsed.deletedZones && typeof parsed.deletedZones === "object" ? parsed.deletedZones : {}
     };
     loaded.locations = [...new Set([...createInitialData().locations, ...loaded.locations, ...loaded.containers.flatMap((container) => container.locations || [])])];
     return normalizeInventoryData(loaded);
@@ -256,13 +267,17 @@ function normalizeInventoryData(data) {
   normalized.deletedLocations = normalized.deletedLocations && typeof normalized.deletedLocations === "object"
     ? normalized.deletedLocations
     : {};
+  normalized.deletedZones = normalized.deletedZones && typeof normalized.deletedZones === "object"
+    ? normalized.deletedZones
+    : {};
   const itemLocations = Array.isArray(normalized.items)
     ? normalized.items.map((item) => item.location).filter(Boolean)
     : [];
   normalized.locations = [...new Set([...locations, ...itemLocations])]
     .filter(Boolean)
     .filter((location) => shouldKeepLocation(location, normalized));
-  normalized.locationMeta = normalizeLocationMeta(normalized.locations, normalized.locationMeta);
+  normalized.locationMeta = normalizeLocationMeta(normalized.locations, normalized.locationMeta, normalized.zones || DEFAULT_ZONES);
+  normalized.zones = normalizeZones(normalized);
   return normalized;
 }
 
@@ -282,7 +297,7 @@ function createDefaultLocationMeta(locations) {
   return normalizeLocationMeta(locations, {});
 }
 
-function normalizeLocationMeta(locations, meta = {}) {
+function normalizeLocationMeta(locations, meta = {}, zones = DEFAULT_ZONES) {
   const now = new Date().toISOString();
   return Object.fromEntries(
     locations.map((location) => {
@@ -290,13 +305,23 @@ function normalizeLocationMeta(locations, meta = {}) {
       return [
         location,
         {
-          zone: existing.zone || inferLocationZone(location),
+          zone: existing.zone || inferLocationZone(location, zones),
           note: existing.note || "",
           updatedAt: existing.updatedAt || now
         }
       ];
     })
   );
+}
+
+function normalizeZones(data) {
+  const zones = Array.isArray(data.zones) ? data.zones : DEFAULT_ZONES;
+  const usedZones = Object.values(data.locationMeta || {})
+    .map((meta) => meta?.zone)
+    .filter(Boolean);
+  return [...new Set([...zones, ...usedZones])]
+    .filter(Boolean)
+    .filter((zone) => !data.deletedZones?.[zone]);
 }
 
 function upgradeContainers(containers) {
@@ -371,6 +396,7 @@ function render() {
   renderStats();
   renderCategoryFilters();
   renderItems();
+  renderZoneFilters();
   renderLocationFilters();
   renderLocations();
   renderReplenish();
@@ -382,6 +408,9 @@ function renderStats() {
   els.itemCount.textContent = state.data.items.length;
   els.locationCount.textContent = state.data.locations.length;
   els.lowCount.textContent = getLowStockItems().length;
+  if (els.manageZonesButton) {
+    els.manageZonesButton.textContent = `管理区域 · ${state.data.zones.length}`;
+  }
   if (els.containerCount) els.containerCount.textContent = getContainers().length;
 }
 
@@ -540,7 +569,6 @@ function renderLocations() {
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1 1.7V21a2 2 0 1 1-4 0v-.1a1.8 1.8 0 0 0-1-1.7 1.8 1.8 0 0 0-2 .4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.8 1.8 0 0 0 .4-2 1.8 1.8 0 0 0-1.7-1H3a2 2 0 1 1 0-4h.1a1.8 1.8 0 0 0 1.7-1 1.8 1.8 0 0 0-.4-2l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.8 1.8 0 0 0 2 .4 1.8 1.8 0 0 0 1-1.7V3a2 2 0 1 1 4 0v.1a1.8 1.8 0 0 0 1 1.7 1.8 1.8 0 0 0 2-.4l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.8 1.8 0 0 0-.4 2 1.8 1.8 0 0 0 1.7 1h.1a2 2 0 1 1 0 4h-.1a1.8 1.8 0 0 0-1.7 1Z"/></svg>
           </summary>
           <div class="location-menu-panel">
-            <button type="button" data-action="view">查看</button>
             <button type="button" data-action="edit">编辑</button>
             <button type="button" class="danger" data-action="delete">删除</button>
           </div>
@@ -552,10 +580,46 @@ function renderLocations() {
       </div>
       ${meta.note ? `<p>${escapeHtml(meta.note)}</p>` : `<p class="muted">没有说明</p>`}
     `;
-    card.querySelector('[data-action="view"]').addEventListener("click", () => openContainerForLocation(location));
-    card.querySelector('[data-action="edit"]').addEventListener("click", () => openLocationModal(location));
-    card.querySelector('[data-action="delete"]').addEventListener("click", () => confirmDeleteLocation(location));
+    card.addEventListener("click", () => openContainerForLocation(location));
+    card.querySelector('[data-action="edit"]').addEventListener("click", (event) => {
+      event.stopPropagation();
+      openLocationModal(location);
+    });
+    card.querySelector('[data-action="delete"]').addEventListener("click", (event) => {
+      event.stopPropagation();
+      confirmDeleteLocation(location);
+    });
     els.locationGrid.appendChild(card);
+  });
+}
+
+function renderZoneFilters() {
+  if (!els.zoneFilters) return;
+  const zones = getFilteredZones();
+  els.zoneFilters.innerHTML = "";
+
+  const all = document.createElement("button");
+  all.className = `chip${state.zoneFilter === "all" ? " active" : ""}`;
+  all.type = "button";
+  all.textContent = `全部区域 ${state.data.zones.length}`;
+  all.addEventListener("click", () => {
+    state.zoneFilter = "all";
+    renderZoneFilters();
+    renderLocations();
+  });
+  els.zoneFilters.appendChild(all);
+
+  zones.forEach((zone) => {
+    const button = document.createElement("button");
+    button.className = `chip${state.zoneFilter === zone ? " active" : ""}`;
+    button.type = "button";
+    button.textContent = zone;
+    button.addEventListener("click", () => {
+      state.zoneFilter = zone;
+      renderZoneFilters();
+      renderLocations();
+    });
+    els.zoneFilters.appendChild(button);
   });
 }
 
@@ -582,6 +646,31 @@ function renderLocationFilters() {
     });
     els.locationFilters.appendChild(button);
   });
+}
+
+function getFilteredZones() {
+  const zones = [...state.data.zones];
+  if (state.zoneFilter === "all") return zones;
+  return zones.filter((zone) => zone === state.zoneFilter);
+}
+
+function getFilteredLocations() {
+  return [...state.data.locations]
+    .filter((location) => {
+      const meta = getLocationMeta(location);
+      if (state.zoneFilter !== "all" && meta.zone !== state.zoneFilter) return false;
+      const items = getItemsForLocation(location);
+      if (state.locationFilter === "active") return items.length > 0;
+      if (state.locationFilter === "empty") return items.length === 0;
+      if (state.locationFilter === "low") return items.some(isLowStock);
+      if (state.locationFilter === "temporary") return /临时|待整理|待归位|暂存/.test(location) || meta.zone === "临时";
+      return true;
+    })
+    .sort((a, b) => {
+      const countDiff = getItemsForLocation(b).length - getItemsForLocation(a).length;
+      if (countDiff) return countDiff;
+      return a.localeCompare(b, "zh-CN");
+    });
 }
 
 function renderReplenish() {
@@ -851,7 +940,7 @@ function openItemDetail(itemId) {
 }
 
 function closeDialogs() {
-  [els.itemModal, els.locationModal, els.detailModal, els.containerModal, els.containerFormModal].forEach((dialog) => {
+  [els.itemModal, els.locationModal, els.zoneModal, els.detailModal, els.containerModal, els.containerFormModal].forEach((dialog) => {
     if (dialog?.open) dialog.close();
   });
 }
@@ -1222,23 +1311,6 @@ function getFilteredItems() {
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 }
 
-function getFilteredLocations() {
-  return [...state.data.locations]
-    .filter((location) => {
-      const items = getItemsForLocation(location);
-      if (state.locationFilter === "active") return items.length > 0;
-      if (state.locationFilter === "empty") return items.length === 0;
-      if (state.locationFilter === "low") return items.some(isLowStock);
-      if (state.locationFilter === "temporary") return /临时|待整理|待归位|暂存/.test(location);
-      return true;
-    })
-    .sort((a, b) => {
-      const countDiff = getItemsForLocation(b).length - getItemsForLocation(a).length;
-      if (countDiff) return countDiff;
-      return a.localeCompare(b, "zh-CN");
-    });
-}
-
 function getLowStockItems() {
   return state.data.items.filter(isLowStock);
 }
@@ -1276,6 +1348,7 @@ function populateFormOptions() {
   const usedCategories = state.data.items.map((item) => item.category).filter(Boolean);
   setSelectOptions(els.itemCategory, [...new Set([...categories, ...usedCategories])]);
   setSelectOptions(els.itemLocation, state.data.locations);
+  setSelectOptions(els.locationZone, state.data.zones);
 }
 
 function setSelectOptions(select, values) {
@@ -1332,7 +1405,7 @@ async function saveLocationFromForm(event) {
   event.preventDefault();
   const originalName = els.locationOriginalName.value.trim();
   const name = els.locationName.value.trim();
-  const zone = els.locationZone.value || inferLocationZone(name);
+  const zone = els.locationZone.value || inferLocationZone(name, state.data.zones);
   const note = els.locationNote.value.trim();
   if (!name) return;
   const duplicate = state.data.locations.includes(name) && name !== originalName;
@@ -1377,11 +1450,122 @@ function openLocationModal(location = "") {
   els.locationModalTitle.textContent = location ? "编辑位置" : "新增位置";
   els.locationOriginalName.value = location || "";
   els.locationName.value = location || "";
-  els.locationZone.value = meta.zone || inferLocationZone(location) || "其他";
+  setSelectOptions(els.locationZone, state.data.zones);
+  if (!state.data.zones.includes(meta.zone)) {
+    const option = document.createElement("option");
+    option.value = meta.zone || "其他";
+    option.textContent = meta.zone || "其他";
+    els.locationZone.appendChild(option);
+  }
+  els.locationZone.value = meta.zone || inferLocationZone(location, state.data.zones) || "其他";
   els.locationNote.value = meta.note || "";
   els.deleteLocationButton.classList.toggle("hidden", !location);
   els.locationModal.showModal();
   setTimeout(() => els.locationName.focus(), 80);
+}
+
+function openZoneModal() {
+  els.zoneOriginalName.value = "";
+  els.zoneName.value = "";
+  setZoneFormMode(false);
+  renderZoneList();
+  els.zoneModal.showModal();
+  setTimeout(() => els.zoneName.focus(), 80);
+}
+
+function renderZoneList() {
+  if (!els.zoneList) return;
+  const zones = [...state.data.zones].sort((a, b) => a.localeCompare(b, "zh-CN"));
+  els.zoneList.innerHTML = "";
+
+  zones.forEach((zone) => {
+    const count = state.data.locations.filter((location) => getLocationMeta(location).zone === zone).length;
+    const row = document.createElement("div");
+    row.className = "zone-row";
+    row.innerHTML = `
+      <div class="zone-row-copy">
+        <strong>${escapeHtml(zone)}</strong>
+        <span>${count} 个位置</span>
+      </div>
+      <div class="zone-row-actions">
+        <button type="button" class="secondary-button" data-action="edit">编辑</button>
+        <button type="button" class="ghost-danger" data-action="delete">删除</button>
+      </div>
+    `;
+    row.querySelector('[data-action="edit"]').addEventListener("click", () => {
+      els.zoneOriginalName.value = zone;
+      els.zoneName.value = zone;
+      setZoneFormMode(true);
+      els.zoneName.focus();
+    });
+    row.querySelector('[data-action="delete"]').addEventListener("click", () => deleteZone(zone));
+    els.zoneList.appendChild(row);
+  });
+
+  if (!zones.length) {
+    els.zoneList.innerHTML = '<div class="empty-state visible"><h3>还没有区域</h3></div>';
+  }
+}
+
+function setZoneFormMode(isEditing) {
+  const title = els.zoneForm?.querySelector(".field-label[for='zoneName']");
+  const submit = els.zoneForm?.querySelector("button[type='submit']");
+  if (title) title.textContent = isEditing ? "编辑区域" : "新增区域";
+  if (submit) submit.textContent = isEditing ? "保存修改" : "添加";
+}
+
+async function saveZoneFromForm(event) {
+  event.preventDefault();
+  const originalName = els.zoneOriginalName.value.trim();
+  const name = els.zoneName.value.trim();
+  if (!name) return;
+  if (state.data.zones.includes(name) && name !== originalName) {
+    showToast("这个区域已经存在");
+    return;
+  }
+
+  const now = new Date().toISOString();
+  state.data.deletedZones = state.data.deletedZones || {};
+  if (originalName && originalName !== name) {
+    const index = state.data.zones.indexOf(originalName);
+    if (index >= 0) state.data.zones[index] = name;
+    state.data.locations.forEach((location) => {
+      const meta = state.data.locationMeta[location];
+      if (meta?.zone === originalName) {
+        meta.zone = name;
+        meta.updatedAt = now;
+      }
+    });
+    state.data.deletedZones[originalName] = now;
+    delete state.data.deletedZones[name];
+    if (state.zoneFilter === originalName) state.zoneFilter = name;
+  } else if (!state.data.zones.includes(name)) {
+    state.data.zones.push(name);
+    delete state.data.deletedZones[name];
+  }
+
+  els.zoneOriginalName.value = "";
+  els.zoneName.value = "";
+  closeDialogs();
+  populateFormOptions();
+  await persistData();
+}
+
+async function deleteZone(zone) {
+  const used = state.data.locations.filter((location) => getLocationMeta(location).zone === zone);
+  if (used.length) {
+    showToast("这个区域还有位置，先把位置改到别的区域");
+    return;
+  }
+  const confirmed = confirm(`确定删除区域「${zone}」吗？`);
+  if (!confirmed) return;
+  state.data.deletedZones = state.data.deletedZones || {};
+  state.data.deletedZones[zone] = new Date().toISOString();
+  state.data.zones = state.data.zones.filter((entry) => entry !== zone);
+  if (state.zoneFilter === zone) state.zoneFilter = "all";
+  closeDialogs();
+  populateFormOptions();
+  await persistData();
 }
 
 async function deleteCurrentLocation() {
@@ -1514,15 +1698,14 @@ function getLocationMeta(location) {
   if (!location) return { zone: "其他", note: "", updatedAt: "" };
   const meta = state.data.locationMeta?.[location] || {};
   return {
-    zone: meta.zone || inferLocationZone(location),
+    zone: meta.zone || inferLocationZone(location, state.data.zones),
     note: meta.note || "",
     updatedAt: meta.updatedAt || ""
   };
 }
 
-function inferLocationZone(location) {
+function inferLocationZone(location, zones = DEFAULT_ZONES) {
   const text = String(location || "");
-  const zones = ["床下", "衣柜", "桌面", "阳台", "卫生间", "厨房", "临时"];
   return zones.find((zone) => text.includes(zone)) || "其他";
 }
 
@@ -1661,6 +1844,8 @@ function mergeInventoryData(localData, remoteData) {
   const localIsNewer = new Date(local.updatedAt || 0) >= new Date(remote.updatedAt || 0);
   const deletedItems = mergeDeletedItems(remote.deletedItems, local.deletedItems);
   const deletedLocations = mergeDeletedLocations(remote.deletedLocations, local.deletedLocations);
+  const deletedZones = mergeDeletedZones(remote.deletedZones, local.deletedZones);
+  const zones = mergeZones(remote.zones, local.zones, deletedZones, remote.locationMeta, local.locationMeta);
   const containers = mergeContainers(remote.containers, local.containers);
   const itemsById = new Map();
 
@@ -1682,11 +1867,13 @@ function mergeInventoryData(localData, remoteData) {
     householdName: localIsNewer ? local.householdName : remote.householdName,
     memberName: local.memberName || remote.memberName || "",
     locations: [...new Set([...remote.locations, ...local.locations])],
-    locationMeta: mergeLocationMeta(remote.locationMeta, local.locationMeta),
+    zones,
+    locationMeta: mergeLocationMeta(remote.locationMeta, local.locationMeta, zones),
     containers,
     items: items.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)),
     deletedItems,
     deletedLocations,
+    deletedZones,
     updatedAt: new Date().toISOString()
   });
 }
@@ -1712,20 +1899,40 @@ function mergeDeletedLocations(remoteDeleted = {}, localDeleted = {}) {
   return merged;
 }
 
-function mergeLocationMeta(remoteMeta = {}, localMeta = {}) {
+function mergeDeletedZones(remoteDeleted = {}, localDeleted = {}) {
+  const merged = {};
+  [...Object.entries(remoteDeleted), ...Object.entries(localDeleted)].forEach(([zone, deletedAt]) => {
+    if (!zone) return;
+    if (!merged[zone] || new Date(deletedAt || 0) > new Date(merged[zone] || 0)) {
+      merged[zone] = deletedAt;
+    }
+  });
+  return merged;
+}
+
+function mergeZones(remoteZones = [], localZones = [], deletedZones = {}, remoteMeta = {}, localMeta = {}) {
+  const metaZones = [...Object.values(remoteMeta || {}), ...Object.values(localMeta || {})]
+    .map((meta) => meta?.zone)
+    .filter(Boolean);
+  return [...new Set([...DEFAULT_ZONES, ...remoteZones, ...localZones, ...metaZones])]
+    .filter(Boolean)
+    .filter((zone) => !deletedZones[zone]);
+}
+
+function mergeLocationMeta(remoteMeta = {}, localMeta = {}, zones = DEFAULT_ZONES) {
   const merged = {};
   [...Object.entries(remoteMeta), ...Object.entries(localMeta)].forEach(([location, meta]) => {
     if (!location) return;
     const existing = merged[location];
     if (!existing || new Date(meta?.updatedAt || 0) >= new Date(existing?.updatedAt || 0)) {
       merged[location] = {
-        zone: meta?.zone || inferLocationZone(location),
+        zone: meta?.zone || inferLocationZone(location, zones),
         note: meta?.note || "",
         updatedAt: meta?.updatedAt || new Date().toISOString()
       };
     }
   });
-  return normalizeLocationMeta(Object.keys(merged), merged);
+  return normalizeLocationMeta(Object.keys(merged), merged, zones);
 }
 
 function mergeContainers(remoteContainers = [], localContainers = []) {
