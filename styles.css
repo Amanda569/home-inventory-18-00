@@ -853,67 +853,125 @@ h3 {
   font-weight: 850;
 }
 
-.location-menu {
+.location-menu,
+.zone-menu {
   position: absolute;
   top: 10px;
   right: 10px;
   z-index: 2;
 }
 
-.location-menu summary {
+.location-menu summary,
+.zone-menu summary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid rgba(15, 118, 110, 0.16);
-  border-radius: 8px;
-  background: #fff;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
   color: var(--muted);
   cursor: pointer;
   list-style: none;
+  box-shadow: 0 6px 16px rgba(31, 37, 35, 0.06);
+  transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
 }
 
-.location-menu summary::-webkit-details-marker {
+.location-menu summary:hover,
+.zone-menu summary:hover {
+  border-color: rgba(15, 118, 110, 0.26);
+  color: var(--teal-dark);
+}
+
+.location-menu summary:active,
+.zone-menu summary:active {
+  transform: scale(0.96);
+}
+
+.location-menu summary svg,
+.zone-menu summary svg {
+  width: 18px;
+  height: 18px;
+}
+
+.location-menu summary::-webkit-details-marker,
+.zone-menu summary::-webkit-details-marker {
   display: none;
 }
 
-.location-menu[open] summary {
+.location-menu[open] summary,
+.zone-menu[open] summary {
   color: var(--teal-dark);
   border-color: rgba(15, 118, 110, 0.35);
-  background: var(--mint);
+  background: rgba(215, 240, 232, 0.96);
 }
 
-.location-menu-panel {
+.location-menu-panel,
+.zone-menu-panel {
   position: absolute;
   top: 42px;
   right: 0;
   display: grid;
-  min-width: 112px;
+  min-width: 120px;
+  padding: 4px;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 12px 30px rgba(31, 37, 35, 0.15);
+  border: 1px solid rgba(221, 216, 204, 0.96);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 14px 34px rgba(31, 37, 35, 0.18);
+  backdrop-filter: blur(10px);
+  transform-origin: top right;
+  animation: menu-pop 0.12s ease-out;
 }
 
-.location-menu-panel button {
+.location-menu-panel button,
+.zone-menu-panel button {
   min-height: 40px;
   border: 0;
-  border-bottom: 1px solid var(--line);
-  background: #fff;
+  border-radius: 9px;
+  background: transparent;
   color: var(--ink);
-  padding: 0 14px;
+  padding: 0 12px;
   text-align: left;
-  font-weight: 800;
+  font-weight: 750;
+  transition: background 0.12s ease, transform 0.12s ease;
 }
 
-.location-menu-panel button:last-child {
-  border-bottom: 0;
+.location-menu-panel button + button,
+.zone-menu-panel button + button {
+  margin-top: 2px;
 }
 
-.location-menu-panel button.danger {
+.location-menu-panel button:hover,
+.zone-menu-panel button:hover {
+  background: rgba(15, 118, 110, 0.08);
+}
+
+.location-menu-panel button.danger:hover,
+.zone-menu-panel button.danger:hover {
+  background: rgba(196, 73, 73, 0.08);
+}
+
+.location-menu-panel button:active,
+.zone-menu-panel button:active {
+  transform: scale(0.985);
+}
+
+.location-menu-panel button.danger,
+.zone-menu-panel button.danger {
   color: var(--red);
+}
+
+@keyframes menu-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .zone-grid {
@@ -955,68 +1013,6 @@ h3 {
 .zone-card span {
   color: var(--muted);
   font-size: 0.8rem;
-}
-
-.zone-menu {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-}
-
-.zone-menu summary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid rgba(15, 118, 110, 0.16);
-  border-radius: 8px;
-  background: #fff;
-  color: var(--muted);
-  cursor: pointer;
-  list-style: none;
-}
-
-.zone-menu summary::-webkit-details-marker {
-  display: none;
-}
-
-.zone-menu[open] summary {
-  color: var(--teal-dark);
-  border-color: rgba(15, 118, 110, 0.35);
-  background: var(--mint);
-}
-
-.zone-menu-panel {
-  position: absolute;
-  top: 42px;
-  right: 0;
-  display: grid;
-  min-width: 112px;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 12px 30px rgba(31, 37, 35, 0.15);
-}
-
-.zone-menu-panel button {
-  min-height: 40px;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  background: #fff;
-  color: var(--ink);
-  padding: 0 14px;
-  text-align: left;
-  font-weight: 800;
-}
-
-.zone-menu-panel button:last-child {
-  border-bottom: 0;
-}
-
-.zone-menu-panel button.danger {
-  color: var(--red);
 }
 
 .zone-detail-list {

@@ -14,13 +14,12 @@ if ($LASTEXITCODE -ne 0) {
 
 & $git diff --cached --quiet
 if ($LASTEXITCODE -eq 0) {
-  Write-Host "No changes to commit."
-  exit 0
-}
-
-& $git commit -m $Message
-if ($LASTEXITCODE -ne 0) {
-  throw "git commit failed"
+  Write-Host "No new file changes. Trying push for existing commits..."
+} else {
+  & $git commit -m $Message
+  if ($LASTEXITCODE -ne 0) {
+    throw "git commit failed"
+  }
 }
 
 & $git push origin main

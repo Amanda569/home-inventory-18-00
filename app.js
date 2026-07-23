@@ -181,6 +181,9 @@ function bindEvents() {
     button.addEventListener("click", () => closeDialogs());
   });
 
+  document.addEventListener("toggle", handleMenuToggle, true);
+  document.addEventListener("click", handleDocumentClick);
+
   document.querySelectorAll("[data-space-mode]").forEach((button) => {
     button.addEventListener("click", () => switchSpaceMode(button.dataset.spaceMode));
   });
@@ -217,6 +220,23 @@ function bindEvents() {
     if (item) openContainerForLocation(item.location);
   });
   els.searchInput.addEventListener("search", render);
+}
+
+function handleMenuToggle(event) {
+  const menu = event.target;
+  if (!menu.matches?.(".location-menu, .zone-menu") || !menu.open) return;
+  closeOpenMenus(menu);
+}
+
+function handleDocumentClick(event) {
+  if (event.target.closest?.(".location-menu, .zone-menu")) return;
+  closeOpenMenus();
+}
+
+function closeOpenMenus(except = null) {
+  document.querySelectorAll(".location-menu[open], .zone-menu[open]").forEach((menu) => {
+    if (menu !== except) menu.removeAttribute("open");
+  });
 }
 
 function createInitialData() {
@@ -579,10 +599,12 @@ function renderLocations() {
     card.addEventListener("click", () => openContainerForLocation(location));
     card.querySelector('[data-action="edit"]').addEventListener("click", (event) => {
       event.stopPropagation();
+      closeOpenMenus();
       openLocationModal(location);
     });
     card.querySelector('[data-action="delete"]').addEventListener("click", (event) => {
       event.stopPropagation();
+      closeOpenMenus();
       confirmDeleteLocation(location);
     });
     els.locationGrid.appendChild(card);
@@ -653,10 +675,12 @@ function renderZones() {
     });
     card.querySelector('[data-action="edit"]').addEventListener("click", (event) => {
       event.stopPropagation();
+      closeOpenMenus();
       openZoneModal(zone);
     });
     card.querySelector('[data-action="delete"]').addEventListener("click", (event) => {
       event.stopPropagation();
+      closeOpenMenus();
       deleteZone(zone);
     });
     els.zoneGrid.appendChild(card);
