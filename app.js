@@ -151,13 +151,16 @@ function bindElements() {
     "emptyReplenish", "householdName", "memberName", "saveSettingsButton",
     "syncStatusCard", "syncStatusText", "syncStatusDetail", "exportButton",
     "importInput", "clearButton", "addItemButton", "itemModal", "itemForm",
-    "itemModalTitle", "itemId", "itemName", "itemCategory", "itemLocation",
+    "itemModalTitle", "itemId", "itemName", "itemCategory", "itemCategoryOptions",
+    "itemZone", "itemZoneOptions", "itemLocation", "itemLocationOptions",
     "itemQuantity", "itemUnit", "trackStock", "minStockWrap",
     "itemMinQuantity", "itemNote", "itemBrand", "itemSpec", "itemPurchaseDate",
     "itemExpiryDate", "itemThumbnail", "deleteItemButton", "locationModal",
     "locationForm", "locationModalTitle", "locationOriginalName", "locationName",
-    "locationZone", "locationNote", "deleteLocationButton", "toast", "spaceCanvas", "spaceStage",
+    "locationZone", "locationNote", "locationImageFile", "locationImage",
+    "locationImagePreview", "clearLocationImageButton", "deleteLocationButton", "toast", "spaceCanvas", "spaceStage",
     "zoneModal", "zoneForm", "zoneModalTitle", "zoneOriginalName", "zoneName",
+    "zoneImageFile", "zoneImage", "zoneImagePreview", "clearZoneImageButton",
     "zoneDetailModal", "zoneDetailTitle", "zoneDetailMeta", "zoneDetailList",
     "selectedContainerName", "selectedContainerMeta", "searchResults",
     "detailModal", "detailTitle", "detailThumb", "detailCategory",
@@ -209,6 +212,12 @@ function bindEvents() {
   els.zoneForm.addEventListener("submit", saveZoneFromForm);
   els.deleteLocationButton.addEventListener("click", deleteCurrentLocation);
   els.trackStock.addEventListener("change", updateMinStockVisibility);
+  els.itemZone?.addEventListener("input", () => refreshItemLocationOptions());
+  els.itemZone?.addEventListener("change", () => refreshItemLocationOptions());
+  els.locationImageFile?.addEventListener("change", (event) => handleImageUpload(event, "location"));
+  els.zoneImageFile?.addEventListener("change", (event) => handleImageUpload(event, "zone"));
+  els.clearLocationImageButton?.addEventListener("click", () => clearImageField("location"));
+  els.clearZoneImageButton?.addEventListener("click", () => clearImageField("zone"));
   els.deleteItemButton.addEventListener("click", deleteCurrentItem);
   els.saveSettingsButton.addEventListener("click", saveSettings);
   els.exportButton.addEventListener("click", exportData);
@@ -256,6 +265,7 @@ function createInitialData() {
     locations,
     zones: [...DEFAULT_ZONES],
     locationMeta: createDefaultLocationMeta(locations),
+    zoneMeta: createDefaultZoneMeta(DEFAULT_ZONES),
     containers: DEFAULT_CONTAINERS,
     items: [],
     deletedItems: {},
@@ -276,6 +286,7 @@ function loadData() {
       locations: Array.isArray(parsed.locations) ? parsed.locations : createInitialData().locations,
       zones: Array.isArray(parsed.zones) ? parsed.zones : createInitialData().zones,
       locationMeta: parsed.locationMeta && typeof parsed.locationMeta === "object" ? parsed.locationMeta : {},
+      zoneMeta: parsed.zoneMeta && typeof parsed.zoneMeta === "object" ? parsed.zoneMeta : {},
       containers: Array.isArray(parsed.containers) ? upgradeContainers(parsed.containers) : DEFAULT_CONTAINERS,
       items: Array.isArray(parsed.items) ? parsed.items : [],
       deletedItems: parsed.deletedItems && typeof parsed.deletedItems === "object" ? parsed.deletedItems : {},
@@ -306,6 +317,7 @@ function normalizeInventoryData(data) {
     .filter((location) => shouldKeepLocation(location, normalized));
   normalized.locationMeta = normalizeLocationMeta(normalized.locations, normalized.locationMeta, normalized.zones || DEFAULT_ZONES);
   normalized.zones = normalizeZones(normalized);
+  normalized.zoneMeta = normalizeZoneMeta(normalized.zones, normalized.zoneMeta);
   return normalized;
 }
 
@@ -325,6 +337,10 @@ function createDefaultLocationMeta(locations) {
   return normalizeLocationMeta(locations, {});
 }
 
+function createDefaultZoneMeta(zones) {
+  return normalizeZoneMeta(zones, {});
+}
+
 function normalizeLocationMeta(locations, meta = {}, zones = DEFAULT_ZONES) {
   const now = new Date().toISOString();
   return Object.fromEntries(
@@ -335,6 +351,23 @@ function normalizeLocationMeta(locations, meta = {}, zones = DEFAULT_ZONES) {
         {
           zone: existing.zone || inferLocationZone(location, zones),
           note: existing.note || "",
+          image: existing.image || "",
+          updatedAt: existing.updatedAt || now
+        }
+      ];
+    })
+  );
+}
+
+function normalizeZoneMeta(zones, meta = {}) {
+  const now = new Date().toISOString();
+  return Object.fromEntries(
+    zones.map((zone) => {
+      const existing = meta?.[zone] || {};
+      return [
+        zone,
+        {
+          image: existing.image || "",
           updatedAt: existing.updatedAt || now
         }
       ];
@@ -585,9 +618,12 @@ function renderLocations() {
     card.className = `location-card${items.length === 0 ? " is-empty" : ""}`;
     card.innerHTML = `
       <div class="location-card-head">
-        <div>
-          <strong>${escapeHtml(location)}</strong>
-          <span>${escapeHtml(meta.zone || "其他")}</span>
+        <div class="location-card-title">
+          ${createEntityThumbnailMarkup(meta.image, location, "md")}
+          <div>
+            <strong>${escapeHtml(location)}</strong>
+            <span>${escapeHtml(meta.zone || "其他")}</span>
+          </div>
         </div>
         <details class="location-menu">
           <summary aria-label="位置设置" title="位置设置">
@@ -660,6 +696,7 @@ function renderZones() {
   els.emptyZones?.classList.toggle("visible", zones.length === 0);
 
   zones.forEach((zone) => {
+    const meta = getZoneMeta(zone);
     const locations = getLocationsForZone(zone);
     const itemCount = locations.reduce((sum, location) => sum + getItemsForLocation(location).length, 0);
     const lowCount = locations.reduce((sum, location) => sum + getItemsForLocation(location).filter(isLowStock).length, 0);
@@ -667,9 +704,12 @@ function renderZones() {
     card.className = `zone-card${locations.length === 0 ? " is-empty" : ""}`;
     card.innerHTML = `
       <div class="zone-card-head">
-        <div>
-          <strong>${escapeHtml(zone)}</strong>
-          <span>${locations.length} 个位置</span>
+        <div class="zone-card-title">
+          ${createEntityThumbnailMarkup(meta.image, zone, "md")}
+          <div>
+            <strong>${escapeHtml(zone)}</strong>
+            <span>${locations.length} 个位置</span>
+          </div>
         </div>
         <details class="zone-menu">
           <summary aria-label="区域设置" title="区域设置">
@@ -751,6 +791,14 @@ function createThumbnailMarkup(item, size = "md") {
     return `<div class="${classes}"><img src="${escapeHtml(thumb)}" alt="${escapeHtml(item.name)}"></div>`;
   }
   return `<div class="${classes}" style="--thumb-color:${color}">${escapeHtml(label)}</div>`;
+}
+
+function createEntityThumbnailMarkup(image, label, size = "md") {
+  const classes = `thumb thumb-${size} entity-thumb`;
+  if (image) {
+    return `<div class="${classes}"><img src="${escapeHtml(image)}" alt="${escapeHtml(label)}"></div>`;
+  }
+  return `<div class="${classes}" style="--thumb-color:#7b8fa1">${escapeHtml(getItemAbbreviation(label))}</div>`;
 }
 
 function getItemAbbreviation(name) {
@@ -1388,10 +1436,11 @@ function openItemModal(id = null, presetLocation = "") {
   els.itemId.value = item?.id || "";
   els.itemName.value = item?.name || "";
   els.itemCategory.value = item?.category || "日用";
-  els.itemLocation.value = item?.location || state.data.locations[0] || "临时-待整理";
-  if (!item && presetLocation) {
-    els.itemLocation.value = presetLocation;
-  }
+  const location = item?.location || presetLocation || state.data.locations[0] || "";
+  const locationZone = location ? getLocationMeta(location).zone : state.data.zones[0] || "其他";
+  els.itemZone.value = locationZone || "其他";
+  refreshItemLocationOptions(els.itemZone.value);
+  els.itemLocation.value = location;
   els.itemQuantity.value = item?.quantity ?? 1;
   els.itemUnit.value = item?.unit || "";
   els.trackStock.checked = Boolean(item?.trackStock);
@@ -1410,9 +1459,10 @@ function openItemModal(id = null, presetLocation = "") {
 function populateFormOptions() {
   const categories = DEFAULT_CATEGORIES.filter((cat) => cat.name !== "全部").map((cat) => cat.name);
   const usedCategories = state.data.items.map((item) => item.category).filter(Boolean);
-  setSelectOptions(els.itemCategory, [...new Set([...categories, ...usedCategories])]);
-  setSelectOptions(els.itemLocation, state.data.locations);
-  setSelectOptions(els.locationZone, state.data.zones);
+  setDatalistOptions(els.itemCategoryOptions, [...new Set([...categories, ...usedCategories])]);
+  setDatalistOptions(els.itemZoneOptions, getKnownZones());
+  refreshItemLocationOptions(els.itemZone?.value || state.data.zones[0] || "");
+  setSelectOptions(els.locationZone, getKnownZones());
 }
 
 function setSelectOptions(select, values) {
@@ -1427,15 +1477,133 @@ function setSelectOptions(select, values) {
   if (values.includes(current)) select.value = current;
 }
 
+function setDatalistOptions(list, values) {
+  if (!list) return;
+  list.innerHTML = "";
+  [...new Set(values.filter(Boolean))].forEach((value) => {
+    const option = document.createElement("option");
+    option.value = value;
+    list.appendChild(option);
+  });
+}
+
+function getKnownZones() {
+  return [...new Set([
+    ...(state.data.zones || []),
+    ...Object.values(state.data.locationMeta || {}).map((meta) => meta?.zone).filter(Boolean)
+  ])].filter(Boolean);
+}
+
+function refreshItemLocationOptions(zoneValue = els.itemZone?.value || "") {
+  const zone = String(zoneValue || "").trim();
+  const locations = zone
+    ? state.data.locations.filter((location) => getLocationMeta(location).zone === zone)
+    : [...state.data.locations];
+  setDatalistOptions(els.itemLocationOptions, locations);
+}
+
+async function handleImageUpload(event, kind) {
+  const file = event.target.files?.[0];
+  const imageInput = kind === "location" ? els.locationImage : els.zoneImage;
+  const preview = kind === "location" ? els.locationImagePreview : els.zoneImagePreview;
+  if (!imageInput || !preview) return;
+  if (!file) {
+    renderImagePreview(preview, imageInput.value || "", kind === "location" ? els.locationName.value : els.zoneName.value);
+    return;
+  }
+  try {
+    const dataUrl = await readFileAsDataUrl(file);
+    imageInput.value = dataUrl;
+    renderImagePreview(preview, dataUrl, kind === "location" ? els.locationName.value : els.zoneName.value);
+  } catch (error) {
+    showToast(error.message || "图片上传失败");
+  }
+}
+
+function clearImageField(kind) {
+  const imageInput = kind === "location" ? els.locationImage : els.zoneImage;
+  const fileInput = kind === "location" ? els.locationImageFile : els.zoneImageFile;
+  const preview = kind === "location" ? els.locationImagePreview : els.zoneImagePreview;
+  const label = kind === "location" ? els.locationName.value : els.zoneName.value;
+  if (imageInput) imageInput.value = "";
+  if (fileInput) fileInput.value = "";
+  if (preview) renderImagePreview(preview, "", label);
+}
+
+function renderImagePreview(container, image, label) {
+  if (!container) return;
+  if (image) {
+    container.innerHTML = `
+      <div class="image-preview-frame">
+        <img src="${escapeHtml(image)}" alt="${escapeHtml(label || "图片")}">
+      </div>
+    `;
+    return;
+  }
+  container.innerHTML = `
+    <div class="image-preview-empty">
+      <span>${escapeHtml(getItemAbbreviation(label || "图片"))}</span>
+      <em>暂无图片</em>
+    </div>
+  `;
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = String(reader.result || "");
+      if (!file.type.startsWith("image/") || file.type === "image/svg+xml") {
+        resolve(dataUrl);
+        return;
+      }
+      try {
+        resolve(await compressImageDataUrl(dataUrl));
+      } catch {
+        resolve(dataUrl);
+      }
+    };
+    reader.onerror = () => reject(new Error("图片读取失败"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function compressImageDataUrl(dataUrl, maxSize = 1200, quality = 0.78) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+      const width = Math.max(1, Math.round(img.width * scale));
+      const height = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+
 async function saveItemFromForm(event) {
   event.preventDefault();
   const id = els.itemId.value || crypto.randomUUID();
   const now = new Date().toISOString();
+  const category = els.itemCategory.value.trim();
+  const zoneInput = els.itemZone.value.trim();
+  const location = els.itemLocation.value.trim();
+  const zone = zoneInput || (location ? getLocationMeta(location).zone : "") || inferLocationZone(location, state.data.zones) || "其他";
+  if (!location) {
+    showToast("请先填写位置");
+    return;
+  }
   const item = {
     id,
     name: els.itemName.value.trim(),
-    category: els.itemCategory.value,
-    location: els.itemLocation.value,
+    category: category || "未分类",
+    location,
     quantity: Number(els.itemQuantity.value || 0),
     unit: els.itemUnit.value.trim(),
     trackStock: els.trackStock.checked,
@@ -1454,14 +1622,22 @@ async function saveItemFromForm(event) {
   if (index >= 0) state.data.items[index] = item;
   else state.data.items.unshift(item);
 
-  if (!state.data.locations.includes(item.location)) {
-    state.data.locations.push(item.location);
+  if (!state.data.zones.includes(zone)) {
+    state.data.zones.push(zone);
   }
-  if (state.data.deletedLocations?.[item.location]) {
-    delete state.data.deletedLocations[item.location];
+  if (!state.data.locations.includes(location)) {
+    state.data.locations.push(location);
   }
+  state.data.locationMeta[location] = {
+    ...(state.data.locationMeta[location] || {}),
+    zone,
+    updatedAt: now
+  };
+  if (state.data.deletedLocations?.[location]) delete state.data.deletedLocations[location];
+  if (state.data.deletedZones?.[zone]) delete state.data.deletedZones[zone];
 
   closeDialogs();
+  populateFormOptions();
   await persistData();
 }
 
@@ -1471,6 +1647,7 @@ async function saveLocationFromForm(event) {
   const name = els.locationName.value.trim();
   const zone = els.locationZone.value || inferLocationZone(name, state.data.zones);
   const note = els.locationNote.value.trim();
+  const image = els.locationImage.value.trim();
   if (!name) return;
   const duplicate = state.data.locations.includes(name) && name !== originalName;
   if (duplicate) {
@@ -1500,6 +1677,7 @@ async function saveLocationFromForm(event) {
   state.data.locationMeta[name] = {
     zone,
     note,
+    image,
     updatedAt: now
   };
   els.locationName.value = "";
@@ -1524,15 +1702,22 @@ function openLocationModal(location = "", presetZone = "") {
   const targetZone = presetZone || meta.zone || inferLocationZone(location, state.data.zones) || "其他";
   els.locationZone.value = targetZone;
   els.locationNote.value = meta.note || "";
+  if (els.locationImage) els.locationImage.value = meta.image || "";
+  if (els.locationImageFile) els.locationImageFile.value = "";
+  renderImagePreview(els.locationImagePreview, meta.image || "", location || targetZone || "位置");
   els.deleteLocationButton.classList.toggle("hidden", !location);
   els.locationModal.showModal();
   setTimeout(() => els.locationName.focus(), 80);
 }
 
 function openZoneModal(zone = "") {
+  const meta = getZoneMeta(zone);
   els.zoneOriginalName.value = zone || "";
   els.zoneName.value = zone || "";
   els.zoneModalTitle.textContent = zone ? "编辑区域" : "新增区域";
+  if (els.zoneImage) els.zoneImage.value = meta.image || "";
+  if (els.zoneImageFile) els.zoneImageFile.value = "";
+  renderImagePreview(els.zoneImagePreview, meta.image || "", zone || "区域");
   els.zoneModal.showModal();
   setTimeout(() => els.zoneName.focus(), 80);
 }
@@ -1541,6 +1726,7 @@ async function saveZoneFromForm(event) {
   event.preventDefault();
   const originalName = els.zoneOriginalName.value.trim();
   const name = els.zoneName.value.trim();
+  const image = els.zoneImage.value.trim();
   if (!name) return;
   if (state.data.zones.includes(name) && name !== originalName) {
     showToast("这个区域已经存在");
@@ -1561,10 +1747,17 @@ async function saveZoneFromForm(event) {
     });
     state.data.deletedZones[originalName] = now;
     delete state.data.deletedZones[name];
+    state.data.zoneMeta = state.data.zoneMeta || {};
+    delete state.data.zoneMeta[originalName];
   } else if (!state.data.zones.includes(name)) {
     state.data.zones.push(name);
     delete state.data.deletedZones[name];
   }
+  state.data.zoneMeta = state.data.zoneMeta || {};
+  state.data.zoneMeta[name] = {
+    image,
+    updatedAt: now
+  };
 
   els.zoneOriginalName.value = "";
   els.zoneName.value = "";
@@ -1584,6 +1777,7 @@ async function deleteZone(zone) {
   state.data.deletedZones = state.data.deletedZones || {};
   state.data.deletedZones[zone] = new Date().toISOString();
   state.data.zones = state.data.zones.filter((entry) => entry !== zone);
+  if (state.data.zoneMeta) delete state.data.zoneMeta[zone];
   closeDialogs();
   populateFormOptions();
   await persistData();
@@ -1605,8 +1799,11 @@ function openZoneDetail(zone) {
     button.type = "button";
     button.className = "zone-location-card";
     button.innerHTML = `
-      <strong>${escapeHtml(location)}</strong>
-      <span>${items.length} 件 · ${meta.note ? escapeHtml(meta.note) : "点击查看"}</span>
+      ${createEntityThumbnailMarkup(meta.image, location, "sm")}
+      <div>
+        <strong>${escapeHtml(location)}</strong>
+        <span>${items.length} 件 · ${meta.note ? escapeHtml(meta.note) : "点击查看"}</span>
+      </div>
     `;
     button.addEventListener("click", () => {
       els.zoneDetailModal.close();
@@ -1756,6 +1953,15 @@ function getLocationMeta(location) {
   return {
     zone: meta.zone || inferLocationZone(location, state.data.zones),
     note: meta.note || "",
+    image: meta.image || "",
+    updatedAt: meta.updatedAt || ""
+  };
+}
+
+function getZoneMeta(zone) {
+  const meta = state.data.zoneMeta?.[zone] || {};
+  return {
+    image: meta.image || "",
     updatedAt: meta.updatedAt || ""
   };
 }
@@ -1925,6 +2131,7 @@ function mergeInventoryData(localData, remoteData) {
     locations: [...new Set([...remote.locations, ...local.locations])],
     zones,
     locationMeta: mergeLocationMeta(remote.locationMeta, local.locationMeta, zones),
+    zoneMeta: mergeZoneMeta(remote.zoneMeta, local.zoneMeta, zones),
     containers,
     items: items.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)),
     deletedItems,
@@ -1984,11 +2191,27 @@ function mergeLocationMeta(remoteMeta = {}, localMeta = {}, zones = DEFAULT_ZONE
       merged[location] = {
         zone: meta?.zone || inferLocationZone(location, zones),
         note: meta?.note || "",
+        image: meta?.image || "",
         updatedAt: meta?.updatedAt || new Date().toISOString()
       };
     }
   });
   return normalizeLocationMeta(Object.keys(merged), merged, zones);
+}
+
+function mergeZoneMeta(remoteMeta = {}, localMeta = {}, zones = DEFAULT_ZONES) {
+  const merged = {};
+  [...Object.entries(remoteMeta), ...Object.entries(localMeta)].forEach(([zone, meta]) => {
+    if (!zone) return;
+    const existing = merged[zone];
+    if (!existing || new Date(meta?.updatedAt || 0) >= new Date(existing?.updatedAt || 0)) {
+      merged[zone] = {
+        image: meta?.image || "",
+        updatedAt: meta?.updatedAt || new Date().toISOString()
+      };
+    }
+  });
+  return normalizeZoneMeta([...zones, ...Object.keys(merged)], merged);
 }
 
 function mergeContainers(remoteContainers = [], localContainers = []) {

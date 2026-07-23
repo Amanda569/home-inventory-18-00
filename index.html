@@ -183,14 +183,20 @@
         <label class="field-label" for="itemName">物品名</label>
         <input class="plain-input" id="itemName" type="text" required placeholder="比如：牙膏">
 
+        <label class="field-label" for="itemCategory">分类（可自定义）</label>
+        <input class="plain-input" id="itemCategory" type="text" list="itemCategoryOptions" placeholder="日用 / 洗漱 / 工具 / 自定义">
+        <datalist id="itemCategoryOptions"></datalist>
+
         <div class="two-col">
           <div>
-            <label class="field-label" for="itemCategory">分类</label>
-            <select class="plain-input" id="itemCategory"></select>
+            <label class="field-label" for="itemZone">区域（可自定义）</label>
+            <input class="plain-input" id="itemZone" type="text" list="itemZoneOptions" placeholder="先选或输入区域">
+            <datalist id="itemZoneOptions"></datalist>
           </div>
           <div>
-            <label class="field-label" for="itemLocation">位置</label>
-            <select class="plain-input" id="itemLocation"></select>
+            <label class="field-label" for="itemLocation">位置（按区域筛选）</label>
+            <input class="plain-input" id="itemLocation" type="text" list="itemLocationOptions" placeholder="先选区域，再选位置，也可直接输入新位置">
+            <datalist id="itemLocationOptions"></datalist>
           </div>
         </div>
 
@@ -329,6 +335,13 @@
         </select>
         <label class="field-label" for="locationNote">说明</label>
         <textarea class="plain-input" id="locationNote" rows="2" placeholder="比如：备用消耗品、只放小件工具"></textarea>
+        <label class="field-label" for="locationImageFile">位置图片</label>
+        <div class="image-upload-row">
+          <input class="plain-input file-input" id="locationImageFile" type="file" accept="image/*">
+          <button class="secondary-button" type="button" id="clearLocationImageButton">清除</button>
+        </div>
+        <input id="locationImage" type="hidden">
+        <div class="image-preview" id="locationImagePreview"></div>
         <div class="modal-actions">
           <button class="ghost-danger hidden" id="deleteLocationButton" type="button">删除</button>
           <button class="secondary-button" type="button" data-close-modal>取消</button>
@@ -348,6 +361,13 @@
         <input id="zoneOriginalName" type="hidden">
         <label class="field-label" for="zoneName">区域名称</label>
         <input class="plain-input" id="zoneName" type="text" placeholder="比如：床头柜">
+        <label class="field-label" for="zoneImageFile">区域图片</label>
+        <div class="image-upload-row">
+          <input class="plain-input file-input" id="zoneImageFile" type="file" accept="image/*">
+          <button class="secondary-button" type="button" id="clearZoneImageButton">清除</button>
+        </div>
+        <input id="zoneImage" type="hidden">
+        <div class="image-preview" id="zoneImagePreview"></div>
         <div class="modal-actions">
           <button class="secondary-button" type="button" data-close-modal>取消</button>
           <button class="primary-button" type="submit">保存</button>
