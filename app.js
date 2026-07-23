@@ -118,7 +118,6 @@ const state = {
   spaceMode: "list",
   containerMode: "grid",
   locationFilter: "all",
-  zoneFilter: "all",
   search: "",
   category: "全部",
   selectedLocation: "",
@@ -146,8 +145,8 @@ function bindElements() {
   [
     "syncButton", "searchInput", "itemCount", "locationCount", "lowCount",
     "categoryFilters", "itemList", "emptyItems", "sampleButton",
-    "locationGrid", "zoneFilters", "locationFilters", "emptyLocations", "addLocationButton",
-    "manageZonesButton", "replenishList", "replenishHint",
+    "locationGrid", "locationFilters", "emptyLocations", "addLocationButton",
+    "zoneGrid", "emptyZones", "addZoneButton", "replenishList", "replenishHint",
     "emptyReplenish", "householdName", "memberName", "saveSettingsButton",
     "syncStatusCard", "syncStatusText", "syncStatusDetail", "exportButton",
     "importInput", "clearButton", "addItemButton", "itemModal", "itemForm",
@@ -157,7 +156,8 @@ function bindElements() {
     "itemExpiryDate", "itemThumbnail", "deleteItemButton", "locationModal",
     "locationForm", "locationModalTitle", "locationOriginalName", "locationName",
     "locationZone", "locationNote", "deleteLocationButton", "toast", "spaceCanvas", "spaceStage",
-    "zoneModal", "zoneForm", "zoneOriginalName", "zoneName", "zoneList",
+    "zoneModal", "zoneForm", "zoneModalTitle", "zoneOriginalName", "zoneName",
+    "zoneDetailModal", "zoneDetailTitle", "zoneDetailMeta", "zoneDetailList",
     "selectedContainerName", "selectedContainerMeta", "searchResults",
     "detailModal", "detailTitle", "detailThumb", "detailCategory",
     "detailQuantity", "detailLocation", "detailGrid", "detailNote",
@@ -197,12 +197,11 @@ function bindEvents() {
   els.addItemButton.addEventListener("click", () => openItemModal());
   els.sampleButton.addEventListener("click", importSamples);
   els.addLocationButton.addEventListener("click", () => openLocationModal());
-  els.manageZonesButton.addEventListener("click", openZoneModal);
+  els.addZoneButton.addEventListener("click", () => openZoneModal());
   els.itemForm.addEventListener("submit", saveItemFromForm);
   els.locationForm.addEventListener("submit", saveLocationFromForm);
   els.zoneForm.addEventListener("submit", saveZoneFromForm);
   els.deleteLocationButton.addEventListener("click", deleteCurrentLocation);
-  els.containerForm?.addEventListener("submit", saveContainerFromForm);
   els.trackStock.addEventListener("change", updateMinStockVisibility);
   els.deleteItemButton.addEventListener("click", deleteCurrentItem);
   els.saveSettingsButton.addEventListener("click", saveSettings);
@@ -396,9 +395,9 @@ function render() {
   renderStats();
   renderCategoryFilters();
   renderItems();
-  renderZoneFilters();
   renderLocationFilters();
   renderLocations();
+  renderZones();
   renderReplenish();
   renderSearchResults();
   updateActiveTabs();
@@ -408,9 +407,6 @@ function renderStats() {
   els.itemCount.textContent = state.data.items.length;
   els.locationCount.textContent = state.data.locations.length;
   els.lowCount.textContent = getLowStockItems().length;
-  if (els.manageZonesButton) {
-    els.manageZonesButton.textContent = `管理区域 · ${state.data.zones.length}`;
-  }
   if (els.containerCount) els.containerCount.textContent = getContainers().length;
 }
 
@@ -593,36 +589,6 @@ function renderLocations() {
   });
 }
 
-function renderZoneFilters() {
-  if (!els.zoneFilters) return;
-  const zones = getFilteredZones();
-  els.zoneFilters.innerHTML = "";
-
-  const all = document.createElement("button");
-  all.className = `chip${state.zoneFilter === "all" ? " active" : ""}`;
-  all.type = "button";
-  all.textContent = `全部区域 ${state.data.zones.length}`;
-  all.addEventListener("click", () => {
-    state.zoneFilter = "all";
-    renderZoneFilters();
-    renderLocations();
-  });
-  els.zoneFilters.appendChild(all);
-
-  zones.forEach((zone) => {
-    const button = document.createElement("button");
-    button.className = `chip${state.zoneFilter === zone ? " active" : ""}`;
-    button.type = "button";
-    button.textContent = zone;
-    button.addEventListener("click", () => {
-      state.zoneFilter = zone;
-      renderZoneFilters();
-      renderLocations();
-    });
-    els.zoneFilters.appendChild(button);
-  });
-}
-
 function renderLocationFilters() {
   if (!els.locationFilters) return;
   const locations = state.data.locations || [];
@@ -648,17 +614,63 @@ function renderLocationFilters() {
   });
 }
 
-function getFilteredZones() {
-  const zones = [...state.data.zones];
-  if (state.zoneFilter === "all") return zones;
-  return zones.filter((zone) => zone === state.zoneFilter);
+function renderZones() {
+  if (!els.zoneGrid) return;
+  const zones = [...state.data.zones].sort((a, b) => a.localeCompare(b, "zh-CN"));
+  els.zoneGrid.innerHTML = "";
+  els.emptyZones?.classList.toggle("visible", zones.length === 0);
+
+  zones.forEach((zone) => {
+    const locations = getLocationsForZone(zone);
+    const itemCount = locations.reduce((sum, location) => sum + getItemsForLocation(location).length, 0);
+    const lowCount = locations.reduce((sum, location) => sum + getItemsForLocation(location).filter(isLowStock).length, 0);
+    const card = document.createElement("article");
+    card.className = `zone-card${locations.length === 0 ? " is-empty" : ""}`;
+    card.innerHTML = `
+      <div class="zone-card-head">
+        <div>
+          <strong>${escapeHtml(zone)}</strong>
+          <span>${locations.length} 个位置</span>
+        </div>
+        <details class="zone-menu">
+          <summary aria-label="区域设置" title="区域设置">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1 1.7V21a2 2 0 1 1-4 0v-.1a1.8 1.8 0 0 0-1-1.7 1.8 1.8 0 0 0-2 .4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.8 1.8 0 0 0 .4-2 1.8 1.8 0 0 0-1.7-1H3a2 2 0 1 1 0-4h.1a1.8 1.8 0 0 0 1.7-1 1.8 1.8 0 0 0-.4-2l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.8 1.8 0 0 0 2 .4 1.8 1.8 0 0 0 1-1.7V3a2 2 0 1 1 4 0v.1a1.8 1.8 0 0 0 1 1.7 1.8 1.8 0 0 0 2-.4l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.8 1.8 0 0 0-.4 2 1.8 1.8 0 0 0 1.7 1h.1a2 2 0 1 1 0 4h-.1a1.8 1.8 0 0 0-1.7 1Z"/></svg>
+          </summary>
+          <div class="zone-menu-panel">
+            <button type="button" data-action="edit">编辑</button>
+            <button type="button" class="danger" data-action="delete">删除</button>
+          </div>
+        </details>
+      </div>
+      <div class="zone-card-stats">
+        <span><b>${itemCount}</b> 件物品</span>
+        <span>${lowCount ? `${lowCount} 待补` : "点击查看"}</span>
+      </div>
+    `;
+    card.addEventListener("click", (event) => {
+      if (event.target.closest(".zone-menu")) return;
+      openZoneDetail(zone);
+    });
+    card.querySelector('[data-action="edit"]').addEventListener("click", (event) => {
+      event.stopPropagation();
+      openZoneModal(zone);
+    });
+    card.querySelector('[data-action="delete"]').addEventListener("click", (event) => {
+      event.stopPropagation();
+      deleteZone(zone);
+    });
+    els.zoneGrid.appendChild(card);
+  });
+}
+
+function getLocationsForZone(zone) {
+  return state.data.locations.filter((location) => getLocationMeta(location).zone === zone);
 }
 
 function getFilteredLocations() {
   return [...state.data.locations]
     .filter((location) => {
       const meta = getLocationMeta(location);
-      if (state.zoneFilter !== "all" && meta.zone !== state.zoneFilter) return false;
       const items = getItemsForLocation(location);
       if (state.locationFilter === "active") return items.length > 0;
       if (state.locationFilter === "empty") return items.length === 0;
@@ -940,7 +952,7 @@ function openItemDetail(itemId) {
 }
 
 function closeDialogs() {
-  [els.itemModal, els.locationModal, els.zoneModal, els.detailModal, els.containerModal, els.containerFormModal].forEach((dialog) => {
+  [els.itemModal, els.locationModal, els.zoneModal, els.zoneDetailModal, els.detailModal, els.containerModal, els.containerFormModal].forEach((dialog) => {
     if (dialog?.open) dialog.close();
   });
 }
@@ -1464,54 +1476,12 @@ function openLocationModal(location = "") {
   setTimeout(() => els.locationName.focus(), 80);
 }
 
-function openZoneModal() {
-  els.zoneOriginalName.value = "";
-  els.zoneName.value = "";
-  setZoneFormMode(false);
-  renderZoneList();
+function openZoneModal(zone = "") {
+  els.zoneOriginalName.value = zone || "";
+  els.zoneName.value = zone || "";
+  els.zoneModalTitle.textContent = zone ? "编辑区域" : "新增区域";
   els.zoneModal.showModal();
   setTimeout(() => els.zoneName.focus(), 80);
-}
-
-function renderZoneList() {
-  if (!els.zoneList) return;
-  const zones = [...state.data.zones].sort((a, b) => a.localeCompare(b, "zh-CN"));
-  els.zoneList.innerHTML = "";
-
-  zones.forEach((zone) => {
-    const count = state.data.locations.filter((location) => getLocationMeta(location).zone === zone).length;
-    const row = document.createElement("div");
-    row.className = "zone-row";
-    row.innerHTML = `
-      <div class="zone-row-copy">
-        <strong>${escapeHtml(zone)}</strong>
-        <span>${count} 个位置</span>
-      </div>
-      <div class="zone-row-actions">
-        <button type="button" class="secondary-button" data-action="edit">编辑</button>
-        <button type="button" class="ghost-danger" data-action="delete">删除</button>
-      </div>
-    `;
-    row.querySelector('[data-action="edit"]').addEventListener("click", () => {
-      els.zoneOriginalName.value = zone;
-      els.zoneName.value = zone;
-      setZoneFormMode(true);
-      els.zoneName.focus();
-    });
-    row.querySelector('[data-action="delete"]').addEventListener("click", () => deleteZone(zone));
-    els.zoneList.appendChild(row);
-  });
-
-  if (!zones.length) {
-    els.zoneList.innerHTML = '<div class="empty-state visible"><h3>还没有区域</h3></div>';
-  }
-}
-
-function setZoneFormMode(isEditing) {
-  const title = els.zoneForm?.querySelector(".field-label[for='zoneName']");
-  const submit = els.zoneForm?.querySelector("button[type='submit']");
-  if (title) title.textContent = isEditing ? "编辑区域" : "新增区域";
-  if (submit) submit.textContent = isEditing ? "保存修改" : "添加";
 }
 
 async function saveZoneFromForm(event) {
@@ -1538,7 +1508,6 @@ async function saveZoneFromForm(event) {
     });
     state.data.deletedZones[originalName] = now;
     delete state.data.deletedZones[name];
-    if (state.zoneFilter === originalName) state.zoneFilter = name;
   } else if (!state.data.zones.includes(name)) {
     state.data.zones.push(name);
     delete state.data.deletedZones[name];
@@ -1562,10 +1531,40 @@ async function deleteZone(zone) {
   state.data.deletedZones = state.data.deletedZones || {};
   state.data.deletedZones[zone] = new Date().toISOString();
   state.data.zones = state.data.zones.filter((entry) => entry !== zone);
-  if (state.zoneFilter === zone) state.zoneFilter = "all";
   closeDialogs();
   populateFormOptions();
   await persistData();
+}
+
+function openZoneDetail(zone) {
+  const locations = getLocationsForZone(zone);
+  const itemCount = locations.reduce((sum, location) => sum + getItemsForLocation(location).length, 0);
+  const lowCount = locations.reduce((sum, location) => sum + getItemsForLocation(location).filter(isLowStock).length, 0);
+  els.zoneDetailTitle.textContent = zone;
+  els.zoneDetailMeta.textContent = `${locations.length} 个位置 · ${itemCount} 件物品${lowCount ? ` · ${lowCount} 件待补` : ""}`;
+  els.zoneDetailList.innerHTML = "";
+
+  locations.forEach((location) => {
+    const items = getItemsForLocation(location);
+    const meta = getLocationMeta(location);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "zone-location-card";
+    button.innerHTML = `
+      <strong>${escapeHtml(location)}</strong>
+      <span>${items.length} 件 · ${meta.note ? escapeHtml(meta.note) : "点击查看"}</span>
+    `;
+    button.addEventListener("click", () => {
+      els.zoneDetailModal.close();
+      openContainerForLocation(location);
+    });
+    els.zoneDetailList.appendChild(button);
+  });
+
+  if (!locations.length) {
+    els.zoneDetailList.innerHTML = '<div class="empty-state visible"><h3>这个区域还没有位置</h3></div>';
+  }
+  els.zoneDetailModal.showModal();
 }
 
 async function deleteCurrentLocation() {

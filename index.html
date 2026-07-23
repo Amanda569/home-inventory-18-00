@@ -65,16 +65,28 @@
           <div class="section-head">
             <h2 id="locationsTitle">位置台账</h2>
             <div class="section-actions">
-              <button class="text-button" id="manageZonesButton">管理区域</button>
               <button class="text-button" id="addLocationButton">新增位置</button>
             </div>
           </div>
-          <div class="filter-row zone-filter-row" id="zoneFilters"></div>
           <div class="filter-row location-filter-row" id="locationFilters"></div>
           <div class="location-grid" id="locationGrid"></div>
           <div class="empty-state compact" id="emptyLocations">
             <div class="empty-visual shelves" aria-hidden="true"></div>
             <h3>还没有符合条件的位置</h3>
+          </div>
+        </section>
+
+        <section class="view" id="zonesView" aria-labelledby="zonesTitle">
+          <div class="section-head">
+            <h2 id="zonesTitle">区域</h2>
+            <div class="section-actions">
+              <button class="text-button" id="addZoneButton">新增区域</button>
+            </div>
+          </div>
+          <div class="zone-grid" id="zoneGrid"></div>
+          <div class="empty-state compact" id="emptyZones">
+            <div class="empty-visual shelves" aria-hidden="true"></div>
+            <h3>还没有区域</h3>
           </div>
         </section>
 
@@ -139,6 +151,10 @@
         <button class="tab" data-view="locations" aria-label="位置">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-4.4 7-11a7 7 0 0 0-14 0c0 6.6 7 11 7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>
           <span>位置</span>
+        </button>
+        <button class="tab" data-view="zones" aria-label="区域">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h7v7H4z"/><path d="M13 5h7v7h-7z"/><path d="M4 14h7v5H4z"/><path d="M13 14h7v5h-7z"/></svg>
+          <span>区域</span>
         </button>
         <button class="tab" data-view="replenish" aria-label="补货">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12l1 7H5l1-7Z"/><path d="M5 9h14l-1.2 13H6.2L5 9Z"/><path d="M9 13h6"/></svg>
@@ -320,19 +336,32 @@
     <dialog class="modal" id="zoneModal">
       <form method="dialog" class="modal-sheet" id="zoneForm">
         <div class="modal-head">
-          <h2>管理区域</h2>
+          <h2 id="zoneModalTitle">新增区域</h2>
           <button class="icon-button" type="button" data-close-modal aria-label="关闭">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
         </div>
         <input id="zoneOriginalName" type="hidden">
-        <label class="field-label" for="zoneName">新增区域</label>
-        <div class="zone-add-row">
-          <input class="plain-input" id="zoneName" type="text" placeholder="比如：床头柜">
-          <button class="primary-button" type="submit">添加</button>
+        <label class="field-label" for="zoneName">区域名称</label>
+        <input class="plain-input" id="zoneName" type="text" placeholder="比如：床头柜">
+        <div class="modal-actions">
+          <button class="secondary-button" type="button" data-close-modal>取消</button>
+          <button class="primary-button" type="submit">保存</button>
         </div>
-        <div class="zone-list" id="zoneList"></div>
       </form>
+    </dialog>
+
+    <dialog class="modal" id="zoneDetailModal">
+      <div class="modal-sheet container-sheet">
+        <div class="modal-head">
+          <h2 id="zoneDetailTitle">区域</h2>
+          <button class="icon-button" type="button" data-close-modal aria-label="关闭">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="container-meta" id="zoneDetailMeta"></div>
+        <div class="zone-detail-list" id="zoneDetailList"></div>
+      </div>
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
