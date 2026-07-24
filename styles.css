@@ -1675,6 +1675,76 @@ textarea.plain-input {
   display: block;
 }
 
+.autocomplete-wrap {
+  position: relative;
+}
+.autocomplete-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: none;
+  max-height: 200px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(31, 37, 35, 0.12);
+}
+.autocomplete-dropdown.visible {
+  display: block;
+}
+.autocomplete-dropdown button {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.92rem;
+}
+.autocomplete-dropdown button:hover,
+.autocomplete-dropdown button.active {
+  background: var(--mint);
+}
+
+.custom-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 10px;
+}
+.custom-field-row input[readonly] {
+  background: #f4f4f4;
+  color: var(--muted);
+}
+.custom-field-row .icon-button {
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(196, 73, 73, 0.35);
+  color: var(--red);
+}
+.builtin-field-row {
+  grid-template-columns: 1fr 1fr;
+}
+
+.expiry-warning {
+  color: var(--red);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.item-group-summary .expiry-warning {
+  margin-left: 8px;
+}
+
+.modal-sheet .field-error {
+  position: relative;
+  z-index: 1;
+}
+
 .toast {
   position: fixed;
   left: 50%;

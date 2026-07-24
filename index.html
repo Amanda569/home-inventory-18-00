@@ -181,8 +181,10 @@
         </div>
         <input id="itemId" type="hidden">
         <label class="field-label" for="itemName">物品名</label>
-        <input class="plain-input" id="itemName" type="text" list="itemNameOptions" required placeholder="比如：牙膏">
-        <datalist id="itemNameOptions"></datalist>
+        <div class="autocomplete-wrap">
+          <input class="plain-input" id="itemName" type="text" required placeholder="比如：牙膏" autocomplete="off">
+          <div class="autocomplete-dropdown" id="itemNameDropdown"></div>
+        </div>
 
         <label class="field-label" for="itemCategory">分类（可自定义）</label>
         <input class="plain-input" id="itemCategory" type="text" list="itemCategoryOptions" placeholder="日用 / 洗漱 / 工具 / 自定义">
@@ -225,24 +227,11 @@
         <label class="field-label" for="itemNote">备注</label>
         <textarea class="plain-input" id="itemNote" rows="2" placeholder="可不填"></textarea>
 
-        <details class="more-fields">
+        <details class="more-fields" id="moreFields">
           <summary>更多资料</summary>
-          <label class="field-label" for="itemBrand">品牌</label>
-          <input class="plain-input" id="itemBrand" type="text" placeholder="比如：维达 / 小米">
-          <label class="field-label" for="itemSpec">规格</label>
-          <input class="plain-input" id="itemSpec" type="text" placeholder="比如：100 抽 x 3 包">
-          <div class="two-col">
-            <div>
-              <label class="field-label" for="itemPurchaseDate">购买日期</label>
-              <input class="plain-input" id="itemPurchaseDate" type="date">
-            </div>
-            <div>
-              <label class="field-label" for="itemExpiryDate">到期日期</label>
-              <input class="plain-input" id="itemExpiryDate" type="date">
-            </div>
-          </div>
-          <label class="field-label" for="itemThumbnail">缩略图链接</label>
-          <input class="plain-input" id="itemThumbnail" type="url" placeholder="可选，粘贴图片地址">
+          <div id="builtinFields"></div>
+          <div id="customFieldsArea"></div>
+          <button type="button" class="text-button" id="addCustomFieldButton">+ 添加自定义字段</button>
         </details>
 
         <div class="modal-actions">
@@ -396,6 +385,23 @@
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <dialog class="modal" id="confirmModal">
+      <div class="modal-sheet">
+        <div class="modal-head">
+          <h2 id="confirmTitle">确认</h2>
+          <button class="icon-button" type="button" data-close-modal aria-label="关闭">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <p id="confirmMessage" style="margin:14px 0; color:var(--ink);"></p>
+        <div class="modal-actions">
+          <button class="secondary-button" type="button" data-close-modal id="confirmCancel">取消</button>
+          <button class="primary-button" type="button" id="confirmOk">确认</button>
+        </div>
+      </div>
+    </dialog>
+
     <script src="./config.js"></script>
     <script src="./app.js"></script>
   </body>
